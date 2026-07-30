@@ -1,0 +1,13 @@
+{
+  "description": "Golden eval set. Each entry: a query, and the memory_id(s) that SHOULD be returned in the top results. Fill this in as you upload real test documents — aim for 50-100 entries covering different question styles (factual, relational, 'what changed', etc.).",
+  "queries": [
+    {
+      "query": "What deadline was set for the MemoraGraph project?",
+      "expected_memory_ids": ["REPLACE_WITH_REAL_MEMORY_ID"]
+    },
+    {
+      "query": "Who is working on the entity extraction pipeline?",
+      "expected_memory_ids": ["REPLACE_WITH_REAL_MEMORY_ID"]
+    }
+  ]
+}
