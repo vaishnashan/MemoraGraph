@@ -18,7 +18,7 @@ falkordb
 # Retrieval
 rank-bm25
 rapidfuzz
-numpy==
+numpy
 
 # MCP server
 mcp
