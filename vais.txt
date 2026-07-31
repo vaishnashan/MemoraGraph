@@ -1,0 +1,8 @@
+python -m application.graph2.test_falkordb    
+
+python -m application.graph2.test_entity_extraction_gemini
+
+python -m application.graph2.test_entity_extraction_groq  
+
+
+
