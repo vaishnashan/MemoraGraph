@@ -15,7 +15,8 @@ import uuid
 from dotenv import load_dotenv
 from groq import Groq
 
-from models.schemas import Entity, Relationship
+
+from application.models.schemas import Entity, Relationship
 
 load_dotenv()
 
