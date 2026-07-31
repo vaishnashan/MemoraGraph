@@ -1,41 +1,28 @@
 """
 Handles raw file storage + document/memory metadata in Supabase.
-
-Expected tables (create these in the Supabase SQL editor on Day 1):
-
-    documents (
-        doc_id text primary key,
-        filename text,
-        file_type text,
-        user_id text,
-        raw_storage_path text,
-        uploaded_at timestamptz default now()
-    )
-
-    memories (
-        memory_id text primary key,
-        doc_id text references documents(doc_id),
-        text text,
-        status text default 'active',
-        superseded_by text,
-        created_at timestamptz default now(),
-        updated_at timestamptz default now()
-    )
+...
 """
+import os
+from dotenv import load_dotenv
 from supabase import create_client, Client
-from app.config import settings
 from app.models.schemas import DocumentMetadata, MemoryRecord, MemoryStatus
+
+load_dotenv()  # reads .env into os.environ
+
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
+SUPABASE_BUCKET = os.environ["SUPABASE_STORAGE_BUCKET"]
 
 
 def get_client() -> Client:
-    return create_client(settings.supabase_url, settings.supabase_key)
+    return create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
 
 
 def upload_raw_file(local_path: str, storage_path: str) -> str:
     """Upload the original file to Supabase Storage. Returns storage path."""
     client = get_client()
     with open(local_path, "rb") as f:
-        client.storage.from_(settings.supabase_bucket).upload(storage_path, f)
+        client.storage.from_(SUPABASE_BUCKET).upload(storage_path, f)
     return storage_path
 
 
