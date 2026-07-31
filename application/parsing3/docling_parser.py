@@ -42,7 +42,7 @@ from application.models6.schemas import Chunk
 # Must match the embedding model used downstream — keeps chunk sizing and
 # embedding aligned to the same model's token limits.
 EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-MAX_TOKENS = 512
+MAX_TOKENS = 460
 
 SUPPORTED_EXTENSIONS = {"pdf", "docx", "xlsx", "png", "jpg", "jpeg", "tiff", "bmp"}
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "tiff", "bmp"}

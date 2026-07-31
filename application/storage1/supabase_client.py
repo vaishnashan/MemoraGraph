@@ -47,6 +47,14 @@ def get_document_metadata(doc_id: str) -> DocumentMetadata | None:
     return DocumentMetadata(**res.data[0])
 
 
+def list_documents_by_user(user_id: str) -> list[DocumentMetadata]:
+    """Used by the list_documents MCP tool — every doc a user has uploaded."""
+    client = get_client()
+    res = client.table("documents").select("*").eq("user_id", user_id).execute()
+    return [DocumentMetadata(**row) for row in res.data]
+
+
+
 # ---------- Memory records (unchanged) ----------
 
 def save_memory(memory: MemoryRecord) -> None:
