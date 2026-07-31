@@ -1,4 +1,4 @@
-version: "3.9"
+
 
 services:
   memoragraph-api:
@@ -24,7 +24,7 @@ services:
     container_name: memoragraph-mcp
     env_file:
       - .env
-    command: ["python", "-m", "application.mcp_server.server"]
+    command: ["python", "-m", "application.mcp_server8.server"]
     stdin_open: true   # required — MCP talks over stdin/stdout
     tty: true
     profiles:
