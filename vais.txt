@@ -11,3 +11,12 @@ python -m application.embeddings.testembed
 uvicorn application.main:app --reload
 
 python -m application.mcp_server8.server
+
+
+docker compose up memoragraph-api
+docker compose run --rm memoragraph-mcp
+
+
+
+docker compose ps
+curl http://localhost:8000/health

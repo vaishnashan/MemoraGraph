@@ -1,16 +1,21 @@
 """
-Reciprocal Rank Fusion (RRF): combines rankings from vector, BM25, and
-fuzzy search into one fair ranked list.
+GET /search — hybrid retrieval endpoint.
 
-RRF score for a document = sum over each ranking list of 1 / (k + rank)
-where rank is 1-indexed position in that list. k=60 is the standard
-default from the original RRF paper — no need to tune unless you have
-a reason to.
+Runs vector + BM25 + fuzzy search and fuses results with Reciprocal
+Rank Fusion (RRF): score = sum over each ranked list of 1 / (k + rank).
+k=60 is the standard default from the original RRF paper.
 
 Langfuse tracing (Day 4): hybrid_search is wrapped with @observe() so
 you get retrieval latency + inputs/outputs in the trace.
 """
+from fastapi import APIRouter
 from langfuse import observe
+
+from application.retrieval5.vector_search import vector_index
+from application.retrieval5.bm25_search import bm25_index
+from application.retrieval5.fuzzy_search import fuzzy_index
+
+router = APIRouter()
 
 
 def reciprocal_rank_fusion(
@@ -29,9 +34,7 @@ def reciprocal_rank_fusion(
 
 
 @observe()
-def hybrid_search(query: str, vector_index, bm25_index, fuzzy_index, top_k: int = 5):
-    """Runs all three retrievers and fuses results. Import indexes at call site
-    to avoid circular imports."""
+def hybrid_search(query: str, top_k: int = 5):
     vector_results = vector_index.search(query, top_k=10)
     bm25_results = bm25_index.search(query, top_k=10)
     fuzzy_results = fuzzy_index.search(query, top_k=10)
@@ -40,3 +43,15 @@ def hybrid_search(query: str, vector_index, bm25_index, fuzzy_index, top_k: int 
         [vector_results, bm25_results, fuzzy_results],
         top_k=top_k,
     )
+
+
+@router.get("/search")
+@observe()
+async def search_endpoint(query: str, top_k: int = 5):
+    fused = hybrid_search(query, top_k=top_k)
+    return {
+        "results": [
+            {"chunk_id": cid, "score": round(score, 4), "text": vector_index.get_text(cid)}
+            for cid, score in fused
+        ]
+    }
