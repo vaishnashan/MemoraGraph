@@ -29,12 +29,29 @@ def get_graph():
     return db.select_graph(FALKORDB_GRAPH_NAME)
 
 
-def add_entity(entity: Entity) -> None:
+def add_entity(entity: Entity) -> str:
+    """
+    Adds or resolves an entity node.
+
+    Entity resolution / duplicate detection: merges on (lowercased name,
+    type) rather than the freshly-generated entity_id, so the same
+    real-world entity mentioned across many chunks/documents becomes ONE
+    graph node instead of a new duplicate node every time it's seen.
+
+    Returns the CANONICAL entity_id — either the existing one if this
+    entity was already known, or the newly created one. Callers must use
+    this returned id (not entity.entity_id) when building relationships,
+    since the id may have been remapped to an existing node.
+    """
     graph = get_graph()
-    graph.query(
+    result = graph.query(
         """
-        MERGE (e:Entity {entity_id: $entity_id})
-        SET e.name = $name, e.type = $type, e.source_doc_id = $source_doc_id
+        MERGE (e:Entity {name_key: toLower($name), type: $type})
+        ON CREATE SET
+            e.entity_id = $entity_id,
+            e.name = $name,
+            e.source_doc_id = $source_doc_id
+        RETURN e.entity_id
         """,
         params={
             "entity_id": entity.entity_id,
@@ -43,9 +60,15 @@ def add_entity(entity: Entity) -> None:
             "source_doc_id": entity.source_doc_id,
         },
     )
+    return result.result_set[0][0]
 
 
 def add_relationship(rel: Relationship) -> None:
+    """
+    IMPORTANT: source_entity_id / target_entity_id must be the CANONICAL
+    ids returned by add_entity() — not the raw ids from extraction — or
+    this MATCH will silently find nothing and no relationship gets created.
+    """
     graph = get_graph()
     graph.query(
         """
@@ -66,13 +89,25 @@ def add_relationship(rel: Relationship) -> None:
 def find_entity_by_name(name: str) -> dict | None:
     graph = get_graph()
     result = graph.query(
-        "MATCH (e:Entity {name: $name}) RETURN e.entity_id, e.name, e.type LIMIT 1",
+        "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) "
+        "RETURN e.entity_id, e.name, e.type LIMIT 1",
         params={"name": name},
     )
     if not result.result_set:
         return None
     row = result.result_set[0]
     return {"entity_id": row[0], "name": row[1], "type": row[2]}
+
+
+def get_entities_by_doc_id(doc_id: str) -> list[dict]:
+    """All entities extracted from a given source document — used by
+    get_document_context to show what MemoraGraph learned from a file."""
+    graph = get_graph()
+    result = graph.query(
+        "MATCH (e:Entity {source_doc_id: $doc_id}) RETURN e.entity_id, e.name, e.type",
+        params={"doc_id": doc_id},
+    )
+    return [{"entity_id": row[0], "name": row[1], "type": row[2]} for row in result.result_set]
 
 
 def two_hop_expansion(entity_name: str) -> list[dict]:

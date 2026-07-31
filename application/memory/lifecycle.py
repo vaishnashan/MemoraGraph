@@ -2,14 +2,17 @@
 This is the piece that makes MemoraGraph a real memory system rather than
 plain GraphRAG: duplicate detection, versioning, and marking memories as
 active / outdated / superseded instead of just deleting or piling on.
+Also home to get_document_context, which pulls together everything known
+about a source document (metadata + extracted entities + stored chunks).
 """
 import uuid
 from application.models.schemas import MemoryRecord, MemoryStatus
-from application.embeddings.ollama_embedder import embed_text, cosine_similarity
-from application.storage import supabase_client as db
+from application.embeddings.embedd import embed_text, cosine_similarity
+from application.storage1 import supabase_client as db
 from application.retrieval.vector_search import vector_index
 from application.retrieval.bm25_search import bm25_index
 from application.retrieval.fuzzy_search import fuzzy_index
+from application.graph2.falkordb_client import get_entities_by_doc_id
 
 DUPLICATE_SIMILARITY_THRESHOLD = 0.95
 
@@ -61,7 +64,6 @@ def update_memory(memory_id: str, new_text: str) -> MemoryRecord:
 
     new_record, duplicate_id = store_memory(new_text, doc_id=old_record.source_doc_id)
     if duplicate_id:
-        # New text matches something already stored — just link old -> that
         db.update_memory_status(memory_id, MemoryStatus.SUPERSEDED, superseded_by=duplicate_id)
         return new_record
 
@@ -84,3 +86,27 @@ def forget_memory(memory_id: str, confirmed: bool) -> tuple[bool, str]:
 
     db.delete_memory(memory_id)
     return True, f"Memory {memory_id} deleted."
+
+
+def get_document_context(doc_id: str) -> dict:
+    """
+    Pulls together everything MemoraGraph knows about a single source
+    document: its metadata, the entities extracted from it, and its
+    stored chunk text. Used by the get_document_context MCP tool so an
+    agent can see full context on a source, not just an isolated
+    retrieved chunk.
+    """
+    metadata = db.get_document_metadata(doc_id)
+    entities = get_entities_by_doc_id(doc_id)
+    chunks = vector_index.get_chunks_by_doc(doc_id)
+
+    return {
+        "doc_id": doc_id,
+        "filename": metadata.filename if metadata else None,
+        "file_type": metadata.file_type if metadata else None,
+        "uploaded_at": metadata.uploaded_at.isoformat() if metadata else None,
+        "found": metadata is not None,
+        "entities": entities,
+        "num_chunks": len(chunks),
+        "chunks_preview": chunks[:3],
+    }

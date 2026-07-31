@@ -3,7 +3,7 @@ Dense vector retrieval. For a portfolio project, an in-memory index is
 fine to start — swap for FalkorDB's vector index or a proper vector DB
 once you outgrow this.
 """
-from application.embeddings.ollama_embedder import embed_text, cosine_similarity
+from application.embeddings.embedd import embed_text, cosine_similarity
 
 
 class VectorIndex:
@@ -27,6 +27,10 @@ class VectorIndex:
     def get_text(self, chunk_id: str) -> str | None:
         entry = self._store.get(chunk_id)
         return entry[0] if entry else None
+
+    def get_chunks_by_doc(self, doc_id: str) -> list[str]:
+        """Used by get_document_context — all chunk texts belonging to a document."""
+        return [text for (text, _, d) in self._store.values() if d == doc_id]
 
 
 # Single shared instance for the app (swap for a persisted store later)

@@ -1,13 +1,12 @@
 """
 Handles raw file storage + document/memory metadata in Supabase.
-...
 """
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from application.models.schemas import DocumentMetadata, MemoryRecord, MemoryStatus
 
-load_dotenv()  # reads .env into os.environ
+load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
@@ -29,6 +28,15 @@ def upload_raw_file(local_path: str, storage_path: str) -> str:
 def save_document_metadata(meta: DocumentMetadata) -> None:
     client = get_client()
     client.table("documents").insert(meta.model_dump(mode="json")).execute()
+
+
+def get_document_metadata(doc_id: str) -> DocumentMetadata | None:
+    """Used by get_document_context — pulls filename/type/upload time for a doc."""
+    client = get_client()
+    res = client.table("documents").select("*").eq("doc_id", doc_id).execute()
+    if not res.data:
+        return None
+    return DocumentMetadata(**res.data[0])
 
 
 def save_memory(memory: MemoryRecord) -> None:

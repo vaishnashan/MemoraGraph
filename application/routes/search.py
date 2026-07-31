@@ -7,7 +7,7 @@ from application.retrieval.vector_search import vector_index
 from application.retrieval.bm25_search import bm25_index
 from application.retrieval.fuzzy_search import fuzzy_index
 from application.retrieval.rrf_fusion import hybrid_search
-from application.graph.falkordb_client import two_hop_expansion
+from application.graph2.falkordb_client import two_hop_expansion, find_entity_by_name
 
 router = APIRouter()
 
@@ -27,12 +27,13 @@ async def search(query: str = Query(...), top_k: int = 5):
             "citation": chunk_id,  # source_doc_id tracking; refine with real doc metadata
         })
 
-    # 2. Graph expansion: naive entity spotting by checking each result's
-    #    text against known entity names. Good enough for v1 — a stronger
-    #    version would run NER on the query itself.
+    # 2. Graph expansion: check if the query itself matches a known entity
+    #    name, and if so pull related entities up to two hops away.
+    #    (A stronger version would run NER on the query — good enough for v1.)
     related_entities = []
-    # Placeholder: in practice, extract candidate entity names from the
-    # query or top results and call two_hop_expansion(name) for each.
+    matched_entity = find_entity_by_name(query.strip())
+    if matched_entity:
+        related_entities = two_hop_expansion(matched_entity["name"])
 
     return {
         "query": query,

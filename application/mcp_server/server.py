@@ -3,15 +3,16 @@ MCP server — the "doorway" that lets external AI agents (Claude, a
 LangGraph app, etc.) call your backend as tools, without knowing how
 any of it is implemented internally.
 
-Exposes 5 tools:
+Exposes 6 tools:
   1. store_memory          (write)
   2. search_memory          (read)
   3. find_related_entities  (read)
-  4. update_memory          (sensitive)
-  5. forget_memory          (sensitive, requires confirm=true)
+  4. get_document_context   (read)
+  5. update_memory          (sensitive)
+  6. forget_memory          (sensitive, requires confirm=true)
 
 Run with:
-    python -m app.mcp_server.server
+    python -m application.mcp_server.server
 """
 import asyncio
 from mcp.server import Server
@@ -19,12 +20,12 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 import json
 
-from application.memory.lifecycle import store_memory, update_memory, forget_memory
+from application.memory.lifecycle import store_memory, update_memory, forget_memory, get_document_context
 from application.retrieval.rrf_fusion import hybrid_search
 from application.retrieval.vector_search import vector_index
 from application.retrieval.bm25_search import bm25_index
 from application.retrieval.fuzzy_search import fuzzy_index
-from application.graph.falkordb_client import two_hop_expansion
+from application.graph2.falkordb_client import two_hop_expansion
 from application.security.permissions import check_permission, audit_log, ToolRisk, PermissionDenied
 
 server = Server("memoragraph")
@@ -65,6 +66,17 @@ TOOLS = [
                 "entity_name": {"type": "string"},
             },
             "required": ["entity_name"],
+        },
+    ),
+    Tool(
+        name="get_document_context",
+        description="Given a document id, return everything MemoraGraph knows about it: metadata, extracted entities, and stored chunk content.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "doc_id": {"type": "string"},
+            },
+            "required": ["doc_id"],
         },
     ),
     Tool(
@@ -128,10 +140,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = {"results": results}
 
         elif name == "find_related_entities":
-            # Read-only, but no user_id required in schema — skip permission check
             related = two_hop_expansion(arguments["entity_name"])
             audit_log(user_id or "anonymous", name, None, f"related: {arguments['entity_name']}")
             result = {"related": related}
+
+        elif name == "get_document_context":
+            check_permission(user_id or "anonymous", name, ToolRisk.READ)
+            context = get_document_context(arguments["doc_id"])
+            audit_log(user_id or "anonymous", name, arguments["doc_id"], "get_document_context")
+            result = context
 
         elif name == "update_memory":
             check_permission(user_id, name, ToolRisk.SENSITIVE)

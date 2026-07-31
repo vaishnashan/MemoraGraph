@@ -4,7 +4,7 @@ imports and behaves sanely before you wire everything together.
 
 Run with: pytest tests/
 """
-from application.parsing.docling_parser import chunk_text
+from application.parsing3.docling_parser import chunk_text
 from application.retrieval.rrf_fusion import reciprocal_rank_fusion
 
 

@@ -1,28 +1,29 @@
 """
 POST /upload — the full write-time pipeline in one endpoint:
 
-  file -> Docling parse -> chunk -> [Supabase raw storage] and
-  [embed + index] and [extract entities/relations -> FalkorDB]
+  file -> Docling parse+chunk -> [Supabase raw storage + metadata]
+       -> [embed + index each chunk for hybrid retrieval]
+       -> [extract entities/relations -> FalkorDB, with entity resolution]
 """
 import uuid
 import shutil
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form
 
-from application.parsing.docling_parser import parse_document, chunk_text
-from application.storage import supabase_client as db
+from application.parsing3.docling_parser import parse_and_chunk
+from application.storage1 import supabase_client as db
 from application.models.schemas import DocumentMetadata
-from application.embeddings.ollama_embedder import embed_text
+from application.embeddings.embedd import embed_text
 from application.retrieval.vector_search import vector_index
 from application.retrieval.bm25_search import bm25_index
 from application.retrieval.fuzzy_search import fuzzy_index
-from application.graph.entity_extraction import extract_entities_and_relationships
-from application.graph.falkordb_client import add_entity, add_relationship
+from application.graph2.entity_extraction_groq import extract_entities_and_relationships
+from application.graph2.falkordb_client import add_entity, add_relationship
 
 router = APIRouter()
 
 TEMP_UPLOAD_DIR = Path("/tmp/memoragraph_uploads")
-TEMP_UPLOAD_DIR.mkdir(exist_ok=True)
+TEMP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @router.post("/upload")
@@ -34,8 +35,8 @@ async def upload_document(user_id: str = Form(...), file: UploadFile = File(...)
     with open(local_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # 2. Parse with Docling into unified structured text
-    parsed = parse_document(str(local_path), doc_id)
+    # 2. Parse + chunk with Docling (structure-aware, tokenizer-aware chunks)
+    parsed, chunks = parse_and_chunk(str(local_path), doc_id)
 
     # 3. Store raw file + metadata in Supabase
     storage_path = f"{user_id}/{doc_id}_{file.filename}"
@@ -48,21 +49,32 @@ async def upload_document(user_id: str = Form(...), file: UploadFile = File(...)
         raw_storage_path=storage_path,
     ))
 
-    # 4. Chunk, embed, and index for hybrid retrieval
-    chunks = chunk_text(parsed.full_text)
-    for i, chunk in enumerate(chunks):
-        chunk_id = f"{doc_id}_chunk_{i}"
-        embedding = embed_text(chunk)
-        vector_index.add(chunk_id, chunk, embedding, doc_id)
-        bm25_index.add(chunk_id, chunk)
-        fuzzy_index.add(chunk_id, chunk)
+    # 4. Embed + index each chunk, and extract + resolve entities/relationships
+    for chunk in chunks:
+        embedding = embed_text(chunk.text)
+        vector_index.add(chunk.chunk_id, chunk.text, embedding, doc_id)
+        bm25_index.add(chunk.chunk_id, chunk.text)
+        fuzzy_index.add(chunk.chunk_id, chunk.text)
 
-        # 5. Extract entities/relationships per chunk and write to FalkorDB
-        entities, relationships = extract_entities_and_relationships(chunk, doc_id)
+        entities, relationships = extract_entities_and_relationships(chunk.text, doc_id)
+
+        # Entity resolution: add_entity() may return a DIFFERENT id than
+        # entity.entity_id if this real-world entity already exists in the
+        # graph (e.g. "FalkorDB" seen in an earlier chunk/document). Build
+        # a map from this chunk's local ids -> canonical graph ids, and use
+        # it to remap relationships before writing them.
+        id_map: dict[str, str] = {}
         for entity in entities:
-            add_entity(entity)
+            canonical_id = add_entity(entity)
+            id_map[entity.entity_id] = canonical_id
+
         for rel in relationships:
+            rel.source_entity_id = id_map.get(rel.source_entity_id, rel.source_entity_id)
+            rel.target_entity_id = id_map.get(rel.target_entity_id, rel.target_entity_id)
             add_relationship(rel)
+
+    # Clean up the temp local copy now that it's safely in Supabase
+    local_path.unlink(missing_ok=True)
 
     return {
         "doc_id": doc_id,
