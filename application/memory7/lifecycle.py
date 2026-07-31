@@ -4,28 +4,31 @@ plain GraphRAG: duplicate detection, versioning, and marking memories as
 active / outdated / superseded instead of just deleting or piling on.
 Also home to get_document_context, which pulls together everything known
 about a source document (metadata + extracted entities + stored chunks).
+
+Persistence note: duplicate detection now uses one indexed Postgres
+query (find_duplicate_memory, via the match_active_memory RPC) instead
+of looping over every active memory in Python and re-embedding each one
+on every single store_memory() call — same result, far less work as
+your memory count grows. Storing a memory is now also a single
+vector_index.add() call instead of three separate index writes, since
+BM25/fuzzy are derived automatically from the same Postgres row.
 """
 import uuid
 from application.models6.schemas import MemoryRecord, MemoryStatus
-from application.embeddings4.embedd import embed_text, cosine_similarity
+from application.embeddings4.embedd import embed_text
 from application.storage1 import supabase_client as db
 from application.retrieval5.vector_search import vector_index
-from application.retrieval5.bm25_search import bm25_index
-from application.retrieval5.fuzzy_search import fuzzy_index
 from application.graph2.falkordb_client import get_entities_by_doc_id
 
 DUPLICATE_SIMILARITY_THRESHOLD = 0.95
 
 
 def _is_duplicate(text: str) -> str | None:
-    """Checks existing active memories for a near-identical match.
-    Returns the existing memory_id if a duplicate is found, else None."""
+    """Checks existing active memories for a near-identical match via a
+    single indexed pgvector query. Returns the existing memory_id if a
+    duplicate is found, else None."""
     new_emb = embed_text(text)
-    for memory in db.list_active_memories():
-        existing_emb = embed_text(memory.text)  # fine for small scale; cache later
-        if cosine_similarity(new_emb, existing_emb) >= DUPLICATE_SIMILARITY_THRESHOLD:
-            return memory.memory_id
-    return None
+    return db.find_duplicate_memory(new_emb, similarity_threshold=DUPLICATE_SIMILARITY_THRESHOLD)
 
 
 def store_memory(text: str, doc_id: str | None = None) -> tuple[MemoryRecord, str | None]:
@@ -43,11 +46,10 @@ def store_memory(text: str, doc_id: str | None = None) -> tuple[MemoryRecord, st
     record = MemoryRecord(memory_id=memory_id, doc_id=doc_id or "", text=text, source_doc_id=doc_id)
     db.save_memory(record)
 
-    # Index it for retrieval immediately (write-time processing)
+    # Index it for retrieval immediately (write-time processing) — one
+    # write covers vector, BM25, and fuzzy search all at once now.
     embedding = embed_text(text)
     vector_index.add(memory_id, text, embedding, doc_id or "")
-    bm25_index.add(memory_id, text)
-    fuzzy_index.add(memory_id, text)
 
     return record, None
 
@@ -84,7 +86,7 @@ def forget_memory(memory_id: str, confirmed: bool) -> tuple[bool, str]:
     if not record:
         return False, f"Memory {memory_id} not found."
 
-    db.delete_memory(memory_id)
+    db.delete_memory(memory_id)  # also removes it from indexed_texts now
     return True, f"Memory {memory_id} deleted."
 
 

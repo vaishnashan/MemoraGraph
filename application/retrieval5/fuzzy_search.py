@@ -1,25 +1,24 @@
 """
-Fuzzy text matching — catches typos, partial names, and near-matches
-that neither vector nor BM25 handle well (e.g. "Falkor DB" vs "FalkorDB").
+Fuzzy text matching — now Postgres trigram similarity (pg_trgm, via the
+match_fuzzy RPC in sql/schema.sql) instead of an in-memory rapidfuzz
+index. Persists across restarts and is shared between the FastAPI and
+MCP server processes.
+
+`add()` is now a no-op — same reason as bm25_search.py: the text is
+already written once by VectorIndex.add(), and Postgres' trigram index
+is built from that same `text` column automatically.
 """
-from rapidfuzz import fuzz
+from application.storage1 import supabase_client as db
 
 
 class FuzzyIndex:
-    def __init__(self):
-        self._store: dict[str, str] = {}  # chunk_id -> text
-
     def add(self, chunk_id: str, text: str) -> None:
-        self._store[chunk_id] = text
+        # No-op — see module docstring.
+        pass
 
     def search(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
-        scored = [
-            (chunk_id, fuzz.partial_ratio(query.lower(), text.lower()))
-            for chunk_id, text in self._store.items()
-        ]
-        scored.sort(key=lambda x: x[1], reverse=True)
-        # normalize 0-100 -> 0-1 to match the other retrievers' scale
-        return [(cid, score / 100.0) for cid, score in scored[:top_k]]
+        rows = db.fuzzy_search(query, top_k=top_k)
+        return [(row["item_id"], row["score"]) for row in rows]
 
 
 fuzzy_index = FuzzyIndex()

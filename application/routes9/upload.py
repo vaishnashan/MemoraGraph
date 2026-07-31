@@ -2,8 +2,16 @@
 POST /upload — the full write-time pipeline in one endpoint:
 
   file -> Docling parse+chunk -> [Supabase raw storage + metadata]
-       -> [embed + index each chunk for hybrid retrieval]
+       -> [embed + index each chunk for hybrid retrieval, persisted]
        -> [extract entities/relations -> FalkorDB, with entity resolution]
+
+Persistence note: vector_index.add() is now the ONLY index write needed
+per chunk — it upserts one row into Supabase's `indexed_texts` table
+with the embedding, and Postgres derives the BM25 (tsvector) and fuzzy
+(trigram) indexes from that same row's `text` column automatically.
+The old separate bm25_index.add() / fuzzy_index.add() calls are gone —
+they're no-ops now anyway, but removing them avoids two pointless
+network round-trips per chunk.
 
 Langfuse tracing (Day 4): the route itself is wrapped with @observe()
 so every /upload call becomes one trace, with parsing, embedding, and
@@ -20,8 +28,6 @@ from application.storage1 import supabase_client as db
 from application.models6.schemas import DocumentMetadata
 from application.embeddings4.embedd import embed_text
 from application.retrieval5.vector_search import vector_index
-from application.retrieval5.bm25_search import bm25_index
-from application.retrieval5.fuzzy_search import fuzzy_index
 from application.graph2.entity_extraction_groq import extract_entities_and_relationships
 from application.graph2.falkordb_client import add_entity, add_relationship
 
@@ -55,8 +61,6 @@ async def upload_document(user_id: str = Form(...), file: UploadFile = File(...)
     for chunk in chunks:
         embedding = embed_text(chunk.text)
         vector_index.add(chunk.chunk_id, chunk.text, embedding, doc_id)
-        bm25_index.add(chunk.chunk_id, chunk.text)
-        fuzzy_index.add(chunk.chunk_id, chunk.text)
 
         entities, relationships = extract_entities_and_relationships(chunk.text, doc_id)
 
