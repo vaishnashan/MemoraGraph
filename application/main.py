@@ -3,7 +3,7 @@ FastAPI entrypoint. Run with:
     uvicorn app.main:app --reload
 """
 from fastapi import FastAPI
-from application.routes import upload, search
+from application.routes9 import upload, search
 
 app = FastAPI(
     title="MemoraGraph",

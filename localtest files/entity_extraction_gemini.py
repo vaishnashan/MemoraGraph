@@ -15,7 +15,7 @@ import uuid
 from dotenv import load_dotenv
 from google import genai
 
-from application.models.schemas import Entity, Relationship
+from application.models6.schemas import Entity, Relationship
 
 load_dotenv()
 

@@ -5,7 +5,7 @@ imports and behaves sanely before you wire everything together.
 Run with: pytest tests/
 """
 from application.parsing3.docling_parser import chunk_text
-from application.retrieval.rrf_fusion import reciprocal_rank_fusion
+from application.retrieval5.rrf_fusion import reciprocal_rank_fusion
 
 
 def test_chunk_text_basic():

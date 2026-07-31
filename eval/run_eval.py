@@ -19,11 +19,11 @@ import uuid
 from pathlib import Path
 
 from application.parsing3.docling_parser import parse_and_chunk
-from application.embeddings.embedd import embed_text
-from application.retrieval.vector_search import vector_index
-from application.retrieval.bm25_search import bm25_index
-from application.retrieval.fuzzy_search import fuzzy_index
-from application.retrieval.rrf_fusion import hybrid_search
+from application.embeddings4.embedd import embed_text
+from application.retrieval5.vector_search import vector_index
+from application.retrieval5.bm25_search import bm25_index
+from application.retrieval5.fuzzy_search import fuzzy_index
+from application.retrieval5.rrf_fusion import hybrid_search
 
 GOLDEN_SET_PATH = Path(__file__).parent / "golden_dataset.json"
 TOP_K = 5

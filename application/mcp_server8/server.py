@@ -20,13 +20,13 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 import json
 
-from application.memory.lifecycle import store_memory, update_memory, forget_memory, get_document_context
-from application.retrieval.rrf_fusion import hybrid_search
-from application.retrieval.vector_search import vector_index
-from application.retrieval.bm25_search import bm25_index
-from application.retrieval.fuzzy_search import fuzzy_index
+from application.memory7.lifecycle import store_memory, update_memory, forget_memory, get_document_context
+from application.retrieval5.rrf_fusion import hybrid_search
+from application.retrieval5.vector_search import vector_index
+from application.retrieval5.bm25_search import bm25_index
+from application.retrieval5.fuzzy_search import fuzzy_index
 from application.graph2.falkordb_client import two_hop_expansion
-from application.security.permissions import check_permission, audit_log, ToolRisk, PermissionDenied
+from application.security10.permissions import check_permission, audit_log, ToolRisk, PermissionDenied
 
 server = Server("memoragraph")
 

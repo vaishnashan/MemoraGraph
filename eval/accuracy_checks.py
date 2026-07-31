@@ -97,7 +97,7 @@ def check_citation_correctness():
     print("2. CITATION CORRECTNESS")
     print("=" * 60)
 
-    from application.retrieval.vector_search import vector_index
+    from application.retrieval5.vector_search import vector_index
 
     if not vector_index._store:
         print("⚠️  vector_index is empty — run this after ingesting documents "
@@ -128,10 +128,10 @@ def check_groundedness_prompts(sample_size: int = 5):
     print("For each pair below, ask: does this chunk ACTUALLY support")
     print("answering the query, or just share some keywords?\n")
 
-    from application.retrieval.vector_search import vector_index
-    from application.retrieval.bm25_search import bm25_index
-    from application.retrieval.fuzzy_search import fuzzy_index
-    from application.retrieval.rrf_fusion import hybrid_search
+    from application.retrieval5.vector_search import vector_index
+    from application.retrieval5.bm25_search import bm25_index
+    from application.retrieval5.fuzzy_search import fuzzy_index
+    from application.retrieval5.rrf_fusion import hybrid_search
 
     with open(GOLDEN_SET_PATH) as f:
         golden = json.load(f)

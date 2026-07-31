@@ -8,3 +8,6 @@ python -m application.graph2.test_entity_extraction_groq
 python -m application.parsing3.test_docling
 
 python -m application.embeddings.testembed   
+uvicorn application.main:app --reload
+
+python -m application.mcp_server8.server

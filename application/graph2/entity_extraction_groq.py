@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from groq import Groq
 from langfuse import observe
 
-from application.models.schemas import Entity, Relationship
+from application.models6.schemas import Entity, Relationship
 
 load_dotenv()
 

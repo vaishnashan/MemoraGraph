@@ -37,7 +37,7 @@ from docling.chunking import HybridChunker
 from docling_core.types.doc.document import DoclingDocument
 from transformers import AutoTokenizer
 
-from application.models.schemas import Chunk
+from application.models6.schemas import Chunk
 
 # Must match the embedding model used downstream — keeps chunk sizing and
 # embedding aligned to the same model's token limits.

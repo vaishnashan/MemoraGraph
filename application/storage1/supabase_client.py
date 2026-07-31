@@ -4,7 +4,7 @@ Handles raw file storage + document/memory metadata in Supabase.
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from application.models.schemas import DocumentMetadata, MemoryRecord, MemoryStatus
+from application.models6.schemas import DocumentMetadata, MemoryRecord, MemoryStatus
 
 load_dotenv()
 

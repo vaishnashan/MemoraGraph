@@ -6,12 +6,12 @@ Also home to get_document_context, which pulls together everything known
 about a source document (metadata + extracted entities + stored chunks).
 """
 import uuid
-from application.models.schemas import MemoryRecord, MemoryStatus
-from application.embeddings.embedd import embed_text, cosine_similarity
+from application.models6.schemas import MemoryRecord, MemoryStatus
+from application.embeddings4.embedd import embed_text, cosine_similarity
 from application.storage1 import supabase_client as db
-from application.retrieval.vector_search import vector_index
-from application.retrieval.bm25_search import bm25_index
-from application.retrieval.fuzzy_search import fuzzy_index
+from application.retrieval5.vector_search import vector_index
+from application.retrieval5.bm25_search import bm25_index
+from application.retrieval5.fuzzy_search import fuzzy_index
 from application.graph2.falkordb_client import get_entities_by_doc_id
 
 DUPLICATE_SIMILARITY_THRESHOLD = 0.95

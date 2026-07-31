@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 from falkordb import FalkorDB
 
-from application.models.schemas import Entity, Relationship
+from application.models6.schemas import Entity, Relationship
 
 load_dotenv()
 
