@@ -4,12 +4,12 @@ plain GraphRAG: duplicate detection, versioning, and marking memories as
 active / outdated / superseded instead of just deleting or piling on.
 """
 import uuid
-from app.models.schemas import MemoryRecord, MemoryStatus
-from app.embeddings.ollama_embedder import embed_text, cosine_similarity
-from app.storage import supabase_client as db
-from app.retrieval.vector_search import vector_index
-from app.retrieval.bm25_search import bm25_index
-from app.retrieval.fuzzy_search import fuzzy_index
+from application.models.schemas import MemoryRecord, MemoryStatus
+from application.embeddings.ollama_embedder import embed_text, cosine_similarity
+from application.storage import supabase_client as db
+from application.retrieval.vector_search import vector_index
+from application.retrieval.bm25_search import bm25_index
+from application.retrieval.fuzzy_search import fuzzy_index
 
 DUPLICATE_SIMILARITY_THRESHOLD = 0.95
 

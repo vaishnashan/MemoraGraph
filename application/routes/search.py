@@ -3,11 +3,11 @@ GET /search — hybrid retrieval (vector + BM25 + fuzzy, fused by RRF),
 followed by two-hop graph expansion for related context.
 """
 from fastapi import APIRouter, Query
-from app.retrieval.vector_search import vector_index
-from app.retrieval.bm25_search import bm25_index
-from app.retrieval.fuzzy_search import fuzzy_index
-from app.retrieval.rrf_fusion import hybrid_search
-from app.graph.falkordb_client import two_hop_expansion
+from application.retrieval.vector_search import vector_index
+from application.retrieval.bm25_search import bm25_index
+from application.retrieval.fuzzy_search import fuzzy_index
+from application.retrieval.rrf_fusion import hybrid_search
+from application.graph.falkordb_client import two_hop_expansion
 
 router = APIRouter()
 

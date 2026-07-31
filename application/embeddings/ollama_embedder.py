@@ -5,7 +5,7 @@ ever leaving the machine (Security requirement: local embedding mode).
 Day 1: run `ollama pull nomic-embed-text` before using this.
 """
 import ollama
-from app.config import settings
+from application.config import settings
 
 
 def embed_text(text: str) -> list[float]:

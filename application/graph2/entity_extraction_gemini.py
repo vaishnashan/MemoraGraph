@@ -2,13 +2,25 @@
 Extracts entities and relationships from a text chunk using an LLM,
 at write time (upload), not at query time — keeps retrieval fast.
 
-Swap the provider in .env: EXTRACTION_PROVIDER=ollama (fully local)
-or "anthropic" (better extraction quality, needs an API key).
+Provider: Google Gemini (Google AI Studio free tier, gemini-2.5-flash by default)
+
+Required env vars:
+    GEMINI_API_KEY
+    EXTRACTION_MODEL   (optional override, defaults to gemini-2.5-flash)
 """
 import json
+import os
 import uuid
-from app.config import settings
-from app.models.schemas import Entity, Relationship
+
+from dotenv import load_dotenv
+from google import genai
+
+from application.models.schemas import Entity, Relationship
+
+load_dotenv()
+
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "gemini-2.5-flash")
 
 EXTRACTION_PROMPT = """Extract entities and relationships from the text below.
 Return ONLY valid JSON, no other text, in this exact shape:
@@ -23,35 +35,20 @@ Text:
 """
 
 
-def _call_ollama(prompt: str) -> str:
-    import ollama
-    response = ollama.chat(
-        model=settings.extraction_model,
-        messages=[{"role": "user", "content": prompt}],
+def _call_gemini(prompt: str) -> str:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    response = client.models.generate_content(
+        model=EXTRACTION_MODEL,
+        contents=prompt,
     )
-    return response["message"]["content"]
-
-
-def _call_anthropic(prompt: str) -> str:
-    import anthropic
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return message.content[0].text
+    return response.text
 
 
 def extract_entities_and_relationships(
     text: str, doc_id: str
 ) -> tuple[list[Entity], list[Relationship]]:
     prompt = EXTRACTION_PROMPT.format(text=text)
-
-    if settings.extraction_provider == "anthropic":
-        raw = _call_anthropic(prompt)
-    else:
-        raw = _call_ollama(prompt)
+    raw = _call_gemini(prompt)
 
     # Strip potential markdown fences before parsing
     cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()

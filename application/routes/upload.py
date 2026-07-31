@@ -9,15 +9,15 @@ import shutil
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form
 
-from app.parsing.docling_parser import parse_document, chunk_text
-from app.storage import supabase_client as db
-from app.models.schemas import DocumentMetadata
-from app.embeddings.ollama_embedder import embed_text
-from app.retrieval.vector_search import vector_index
-from app.retrieval.bm25_search import bm25_index
-from app.retrieval.fuzzy_search import fuzzy_index
-from app.graph.entity_extraction import extract_entities_and_relationships
-from app.graph.falkordb_client import add_entity, add_relationship
+from application.parsing.docling_parser import parse_document, chunk_text
+from application.storage import supabase_client as db
+from application.models.schemas import DocumentMetadata
+from application.embeddings.ollama_embedder import embed_text
+from application.retrieval.vector_search import vector_index
+from application.retrieval.bm25_search import bm25_index
+from application.retrieval.fuzzy_search import fuzzy_index
+from application.graph.entity_extraction import extract_entities_and_relationships
+from application.graph.falkordb_client import add_entity, add_relationship
 
 router = APIRouter()
 

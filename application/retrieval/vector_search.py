@@ -3,7 +3,7 @@ Dense vector retrieval. For a portfolio project, an in-memory index is
 fine to start — swap for FalkorDB's vector index or a proper vector DB
 once you outgrow this.
 """
-from app.embeddings.ollama_embedder import embed_text, cosine_similarity
+from application.embeddings.ollama_embedder import embed_text, cosine_similarity
 
 
 class VectorIndex:

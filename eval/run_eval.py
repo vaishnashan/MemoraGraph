@@ -8,10 +8,10 @@ Usage:
 """
 import json
 from pathlib import Path
-from app.retrieval.rrf_fusion import hybrid_search
-from app.retrieval.vector_search import vector_index
-from app.retrieval.bm25_search import bm25_index
-from app.retrieval.fuzzy_search import fuzzy_index
+from application.retrieval.rrf_fusion import hybrid_search
+from application.retrieval.vector_search import vector_index
+from application.retrieval.bm25_search import bm25_index
+from application.retrieval.fuzzy_search import fuzzy_index
 
 GOLDEN_PATH = Path(__file__).parent / "golden_dataset.json"
 
