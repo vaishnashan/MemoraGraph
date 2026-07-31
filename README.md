@@ -1,128 +1,117 @@
 # MemoraGraph
 
-Private multimodal AI memory infrastructure exposed through the Model Context Protocol (MCP).
+**Private Multimodal AI Memory Infrastructure with MCP**
 
-A reusable memory service that external AI agents (Claude-compatible clients, LangGraph apps, etc.)
-can call as a tool — to store, search, update, and forget memories, backed by hybrid retrieval
-(vector + BM25 + fuzzy) and a knowledge graph (FalkorDB) for relationship-aware context.
+A reusable personal or organisational memory service that AI assistants can call as a tool — not another chat window. MemoraGraph stores information, retrieves relevant memories via hybrid search, identifies entities and relationships, tracks memory lifecycle (active/outdated/superseded), and exposes all of this through the **Model Context Protocol (MCP)** so external agents (Claude, a LangGraph app, etc.) can use it directly.
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    U["User uploads PDF / DOCX / XLSX / Image"] --> UP["FastAPI /upload"]
+    UP --> DOC["Docling parser<br/>(HybridChunker)"]
+    DOC --> CH["Chunks"]
+
+    CH --> ST["Supabase<br/>raw file + metadata"]
+    CH --> EMB["sentence-transformers<br/>embeddings"]
+    CH --> ENT["Groq/Gemini<br/>entity extraction"]
+
+    EMB --> VEC["Vector index"]
+    CH --> BM25["BM25 index"]
+    CH --> FUZ["Fuzzy index"]
+
+    ENT --> RES["Entity resolution<br/>(merge by name+type)"]
+    RES --> FDB["FalkorDB<br/>graph store"]
+
+    Q["User query"] --> SR["FastAPI /search"]
+    SR --> VEC
+    SR --> BM25
+    SR --> FUZ
+    VEC --> RRF["Reciprocal Rank Fusion"]
+    BM25 --> RRF
+    FUZ --> RRF
+    RRF --> HOP["Two-hop graph expansion"]
+    FDB --> HOP
+    HOP --> OUT["Ranked results + citations + related entities"]
+
+    AGENT["External AI agent<br/>(Claude, LangGraph, etc.)"] --> MCP["MCP server"]
+    MCP --> SM["store_memory"]
+    MCP --> SEM["search_memory"]
+    MCP --> FRE["find_related_entities"]
+    MCP --> GDC["get_document_context"]
+    MCP --> UPM["update_memory"]
+    MCP --> FGM["forget_memory"]
+    SEM --> RRF
+    FRE --> FDB
+    GDC --> ST
+    GDC --> FDB
 ```
-PDF / DOCX
-    │
-    ▼
-Docling (parse into unified structured text)
-    │
-    ├──► Supabase (raw file + document metadata)
-    │
-    ├──► Chunk → Ollama embeddings ──► Vector index ─┐
-    │                                  BM25 index    ├─► RRF fusion ──► ranked results
-    │                                  Fuzzy index   ─┘
-    │
-    └──► LLM entity/relation extraction ──► FalkorDB (property graph)
-                                                  │
-                                                  ▼
-                                    Two-hop graph expansion (related entities)
 
-                    All of the above wrapped as 5 MCP tools:
-        store_memory · search_memory · find_related_entities
-                    update_memory · forget_memory
-                              │
-                              ▼
-                Permission checks + audit log (security layer)
-```
+## Tech Stack
 
-## Project structure
-
-```
-app/
-  main.py                 FastAPI entrypoint (upload + search HTTP endpoints)
-  config.py               Settings loaded from .env
-  models/schemas.py        Pydantic models shared across all layers
-  parsing/docling_parser.py       PDF/DOCX parsing + chunking
-  storage/supabase_client.py      Raw file + metadata storage
-  embeddings/ollama_embedder.py   Local embeddings
-  retrieval/
-    vector_search.py       Dense retrieval
-    bm25_search.py          Keyword retrieval
-    fuzzy_search.py         Fuzzy text matching
-    rrf_fusion.py           Combines all three via RRF
-  graph/
-    falkordb_client.py     Graph writes + two-hop expansion
-    entity_extraction.py   LLM-based entity/relation extraction
-  memory/lifecycle.py      Store/update/forget + dedup + versioning
-  security/permissions.py  Access control + audit log
-  routes/                  FastAPI HTTP routes
-  mcp_server/server.py     MCP server exposing the 5 tools
-
-eval/
-  golden_dataset.json      Test queries + expected results
-  run_eval.py              Recall@5 / MRR scoring
-
-tests/test_basic.py        Smoke tests
-docker-compose.yml          FalkorDB + Ollama + backend
-```
+| Layer | Tool |
+|---|---|
+| Document parsing | Docling (PDF, DOCX, XLSX, images) |
+| Chunking | Docling HybridChunker (tokenizer-aware, structure-aware) |
+| Embeddings | sentence-transformers (`all-MiniLM-L6-v2`), fully local |
+| Raw storage / metadata | Supabase |
+| Graph store | FalkorDB (property graph, OpenCypher) |
+| Entity extraction | Groq (Llama 3.3 70B) / Gemini |
+| Retrieval | Vector + BM25 + fuzzy, fused via RRF |
+| Tool interface | Model Context Protocol (MCP) server |
+| Backend | FastAPI |
+| Observability | Langfuse tracing |
+| Deployment | Docker Compose, GitHub Actions |
 
 ## Setup
 
-1. **Install dependencies**
+1. Clone the repo and create a virtualenv:
    ```bash
-   python -m venv venv && source venv/bin/activate
+   python -m venv venv
+   venv\Scripts\activate      # Windows
    pip install -r requirements.txt
    ```
 
-2. **Environment**
+2. Copy `.env.example` to `.env` and fill in:
+   - `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_STORAGE_BUCKET`
+   - `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_PASSWORD`
+   - `GROQ_API_KEY` (or `GEMINI_API_KEY`)
+   - `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
+
+3. Run the server:
    ```bash
-   cp .env.example .env
-   # fill in SUPABASE_URL, SUPABASE_KEY, etc.
+   uvicorn application.main:app --reload
    ```
 
-3. **Start FalkorDB + Ollama**
-   ```bash
-   docker-compose up falkordb ollama -d
-   ollama pull nomic-embed-text
-   ollama pull llama3.1   # or whatever you set as EXTRACTION_MODEL
-   ```
+4. Open `http://localhost:8000/docs` to try `/upload` and `/search`.
 
-4. **Create Supabase tables** — run the SQL in `app/storage/supabase_client.py`'s
-   docstring in the Supabase SQL editor, and create a storage bucket named
-   `memoragraph-files` (or whatever you set in `.env`).
+## Running the evaluation suite
 
-5. **Run the API**
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-   Visit `http://localhost:8000/docs` for interactive API docs.
+```bash
+python eval/run_eval.py          # Recall@5 / MRR
+python eval/accuracy_checks.py   # entity extraction, citation, groundedness
+python eval/latency_check.py     # retrieval latency + tool-selection baseline
+```
 
-6. **Run the MCP server** (separate process, for AI agents to connect to)
-   ```bash
-   python -m app.mcp_server.server
-   ```
+## Running via Docker
 
-7. **Run tests**
-   ```bash
-   pytest tests/
-   ```
+```bash
+docker compose up --build
+```
 
-8. **Run eval** (after uploading test documents and filling in `eval/golden_dataset.json`)
-   ```bash
-   python eval/run_eval.py
-   ```
+## MCP Tools Exposed
 
-## Day-by-day build order
+| Tool | Purpose |
+|---|---|
+| `store_memory` | Write a new memory (with duplicate detection) |
+| `search_memory` | Hybrid search (vector + BM25 + fuzzy, RRF-fused) |
+| `find_related_entities` | Two-hop graph expansion around an entity |
+| `get_document_context` | Full context on a source document |
+| `update_memory` | Versioned update (marks old as superseded) |
+| `forget_memory` | Deletion, requires explicit confirmation |
 
-Follow the 3-week plan you already have:
-- **Week 1**: `parsing/` → `storage/` → `embeddings/` → `retrieval/` → `/search` endpoint
-- **Week 2**: `graph/` → `memory/lifecycle.py` → `mcp_server/server.py` → `security/permissions.py`
-- **Week 3**: `eval/` → Docker deployment → demo + README polish
+## Project Positioning
 
-## Notes
+MemoraGraph demonstrates reusable AI infrastructure, multimodal ingestion, persistent and temporal memory, MCP server engineering, privacy and permissions, write-time knowledge extraction, and memory lifecycle management.
 
-- `vector_index`, `bm25_index`, `fuzzy_index` are in-memory for v1 — fine for building and
-  demoing. If you want persistence across restarts, back these with FalkorDB's own vector/full-text
-  indexes or a dedicated store.
-- Entity extraction runs per-chunk at upload time — tune the prompt in
-  `entity_extraction.py` once you see real outputs on your sample documents.
-- `forget_memory` will refuse to delete anything unless called with `confirm=true` —
-  this is intentional (Security requirement: confirmation before deletion).
+*Note: "MCP" refers to the open Model Context Protocol specification, not an Anthropic-specific term.*

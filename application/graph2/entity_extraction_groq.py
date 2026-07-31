@@ -7,6 +7,10 @@ Provider: Groq (free tier, fast, Llama 3.3 70B by default)
 Required env vars:
     GROQ_API_KEY
     EXTRACTION_MODEL   (optional override, defaults to llama-3.3-70b-versatile)
+
+Langfuse tracing (Day 4): both the raw LLM call and the overall extraction
+function are wrapped with @observe() so each shows up as a nested span
+under whichever route (e.g. /upload) triggered it.
 """
 import json
 import os
@@ -14,7 +18,7 @@ import uuid
 
 from dotenv import load_dotenv
 from groq import Groq
-
+from langfuse import observe
 
 from application.models.schemas import Entity, Relationship
 
@@ -36,6 +40,7 @@ Text:
 """
 
 
+@observe()
 def _call_groq(prompt: str) -> str:
     client = Groq(api_key=GROQ_API_KEY)
     response = client.chat.completions.create(
@@ -45,19 +50,18 @@ def _call_groq(prompt: str) -> str:
     return response.choices[0].message.content
 
 
+@observe()
 def extract_entities_and_relationships(
     text: str, doc_id: str
 ) -> tuple[list[Entity], list[Relationship]]:
     prompt = EXTRACTION_PROMPT.format(text=text)
     raw = _call_groq(prompt)
 
-    # Strip potential markdown fences before parsing
     cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
 
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
-        # Extraction models occasionally wrap or malform JSON — fail soft
         return [], []
 
     name_to_id: dict[str, str] = {}

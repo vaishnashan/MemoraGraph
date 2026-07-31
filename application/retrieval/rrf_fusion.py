@@ -6,18 +6,18 @@ RRF score for a document = sum over each ranking list of 1 / (k + rank)
 where rank is 1-indexed position in that list. k=60 is the standard
 default from the original RRF paper — no need to tune unless you have
 a reason to.
+
+Langfuse tracing (Day 4): hybrid_search is wrapped with @observe() so
+you get retrieval latency + inputs/outputs in the trace.
 """
+from langfuse import observe
+
 
 def reciprocal_rank_fusion(
     ranked_lists: list[list[tuple[str, float]]],
     k: int = 60,
     top_k: int = 5,
 ) -> list[tuple[str, float]]:
-    """
-    ranked_lists: e.g. [vector_results, bm25_results, fuzzy_results]
-                  each is a list of (chunk_id, score) already sorted best-first
-    Returns: [(chunk_id, fused_score)] sorted best-first
-    """
     fused_scores: dict[str, float] = {}
 
     for ranked_list in ranked_lists:
@@ -28,6 +28,7 @@ def reciprocal_rank_fusion(
     return result[:top_k]
 
 
+@observe()
 def hybrid_search(query: str, vector_index, bm25_index, fuzzy_index, top_k: int = 5):
     """Runs all three retrievers and fuses results. Import indexes at call site
     to avoid circular imports."""

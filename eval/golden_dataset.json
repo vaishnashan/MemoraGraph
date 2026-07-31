@@ -1,13 +1,185 @@
 {
-  "description": "Golden eval set. Each entry: a query, and the memory_id(s) that SHOULD be returned in the top results. Fill this in as you upload real test documents — aim for 50-100 entries covering different question styles (factual, relational, 'what changed', etc.).",
-  "queries": [
+  "_instructions": "Fill in real doc_id / chunk_id values after you've uploaded project_2.pdf and project_3.pdf through /upload. This is a DRAFT with 20 entries covering both docs and multiple question styles (easy factual, medium detail, hard multi-hop, entity-focused). Expand to 50-100 by writing more questions in this same shape, covering every document type you test with (pdf/docx/xlsx/image).",
+  "entries": [
     {
-      "query": "What deadline was set for the MemoraGraph project?",
-      "expected_memory_ids": ["REPLACE_WITH_REAL_MEMORY_ID"]
+      "id": "q001",
+      "query": "What is MemoraGraph?",
+      "difficulty": "easy",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["private", "multimodal", "AI memory infrastructure"],
+      "expected_entities": ["MemoraGraph"]
     },
     {
-      "query": "Who is working on the entity extraction pipeline?",
-      "expected_memory_ids": ["REPLACE_WITH_REAL_MEMORY_ID"]
+      "id": "q002",
+      "query": "What graph database does MemoraGraph use?",
+      "difficulty": "easy",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["FalkorDB"],
+      "expected_entities": ["FalkorDB"]
+    },
+    {
+      "id": "q003",
+      "query": "Where are raw files and document metadata stored?",
+      "difficulty": "easy",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["Supabase"],
+      "expected_entities": ["Supabase"]
+    },
+    {
+      "id": "q004",
+      "query": "How does MemoraGraph combine vector, BM25, and fuzzy retrieval results?",
+      "difficulty": "medium",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["Reciprocal Rank Fusion", "RRF"],
+      "expected_entities": ["RRF", "Reciprocal Rank Fusion"]
+    },
+    {
+      "id": "q005",
+      "query": "How many relationship hops does the graph expansion feature pull?",
+      "difficulty": "medium",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["two", "hops"],
+      "expected_entities": []
+    },
+    {
+      "id": "q006",
+      "query": "What security requirement mentions local embedding mode?",
+      "difficulty": "medium",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["local embedding", "private content"],
+      "expected_entities": []
+    },
+    {
+      "id": "q007",
+      "query": "What MCP tools does MemoraGraph expose to external agents?",
+      "difficulty": "medium",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["search_memory", "store_memory", "find_related_entities", "update_memory", "forget_memory"],
+      "expected_entities": []
+    },
+    {
+      "id": "q008",
+      "query": "What must happen before a memory can be permanently deleted?",
+      "difficulty": "medium",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["confirmation", "deleting"],
+      "expected_entities": []
+    },
+    {
+      "id": "q009",
+      "query": "What library parses PDFs, Office documents, spreadsheets, images, and audio into a unified representation?",
+      "difficulty": "medium",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["Docling"],
+      "expected_entities": ["Docling"]
+    },
+    {
+      "id": "q010",
+      "query": "In the two-hop expansion example, what does NOVA use, and what is it deployed on?",
+      "difficulty": "hard",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["LangGraph", "GCP"],
+      "expected_entities": ["NOVA", "LangGraph", "GCP"]
+    },
+    {
+      "id": "q011",
+      "query": "What is VoxOps?",
+      "difficulty": "easy",
+      "source_document": "project_3.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["real-time voice AI", "helpdesk agent"],
+      "expected_entities": ["VoxOps"]
+    },
+    {
+      "id": "q012",
+      "query": "What kind of department or use case is VoxOps designed for?",
+      "difficulty": "easy",
+      "source_document": "project_3.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["IT helpdesk", "internal support"],
+      "expected_entities": []
+    },
+    {
+      "id": "q013",
+      "query": "What example problem does a user report to the VoxOps agent?",
+      "difficulty": "medium",
+      "source_document": "project_3.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["laptop", "Wi-Fi", "university"],
+      "expected_entities": []
+    },
+    {
+      "id": "q014",
+      "query": "What does VoxOps check before creating a support ticket in the example interaction?",
+      "difficulty": "medium",
+      "source_document": "project_3.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["university account", "active"],
+      "expected_entities": []
+    },
+    {
+      "id": "q015",
+      "query": "What does the VoxOps CV positioning emphasize compared to MemoraGraph?",
+      "difficulty": "hard",
+      "source_document": "project_3.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["real-time Voice AI", "streaming systems", "STT/TTS", "latency"],
+      "expected_entities": []
+    },
+    {
+      "id": "q016",
+      "query": "How does MemoraGraph mark information that has been replaced by newer facts?",
+      "difficulty": "medium",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["active", "outdated", "superseded"],
+      "expected_entities": []
+    },
+    {
+      "id": "q017",
+      "query": "What deployment tools are used for MemoraGraph?",
+      "difficulty": "easy",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["Docker Compose", "GitHub Actions"],
+      "expected_entities": ["Docker Compose", "GitHub Actions"]
+    },
+    {
+      "id": "q018",
+      "query": "What observability tool is used for tracing in MemoraGraph?",
+      "difficulty": "easy",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["Langfuse"],
+      "expected_entities": ["Langfuse"]
+    },
+    {
+      "id": "q019",
+      "query": "Should MCP be referred to as 'Anthropic MCP' on the CV?",
+      "difficulty": "hard",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["Model Context Protocol", "not"],
+      "expected_entities": []
+    },
+    {
+      "id": "q020",
+      "query": "What backend framework does MemoraGraph use?",
+      "difficulty": "easy",
+      "source_document": "project_2.pdf",
+      "expected_doc_id": "FILL_IN_AFTER_UPLOAD",
+      "expected_keywords": ["FastAPI"],
+      "expected_entities": ["FastAPI"]
     }
   ]
 }

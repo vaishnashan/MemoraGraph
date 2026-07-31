@@ -1,42 +1,42 @@
 """
-GET /search — hybrid retrieval (vector + BM25 + fuzzy, fused by RRF),
-followed by two-hop graph expansion for related context.
+Reciprocal Rank Fusion (RRF): combines rankings from vector, BM25, and
+fuzzy search into one fair ranked list.
+
+RRF score for a document = sum over each ranking list of 1 / (k + rank)
+where rank is 1-indexed position in that list. k=60 is the standard
+default from the original RRF paper — no need to tune unless you have
+a reason to.
+
+Langfuse tracing (Day 4): hybrid_search is wrapped with @observe() so
+you get retrieval latency + inputs/outputs in the trace.
 """
-from fastapi import APIRouter, Query
-from application.retrieval.vector_search import vector_index
-from application.retrieval.bm25_search import bm25_index
-from application.retrieval.fuzzy_search import fuzzy_index
-from application.retrieval.rrf_fusion import hybrid_search
-from application.graph2.falkordb_client import two_hop_expansion, find_entity_by_name
-
-router = APIRouter()
+from langfuse import observe
 
 
-@router.get("/search")
-async def search(query: str = Query(...), top_k: int = 5):
-    # 1. Hybrid retrieval fused via RRF
-    fused_results = hybrid_search(query, vector_index, bm25_index, fuzzy_index, top_k=top_k)
+def reciprocal_rank_fusion(
+    ranked_lists: list[list[tuple[str, float]]],
+    k: int = 60,
+    top_k: int = 5,
+) -> list[tuple[str, float]]:
+    fused_scores: dict[str, float] = {}
 
-    results = []
-    for chunk_id, score in fused_results:
-        text = vector_index.get_text(chunk_id)
-        results.append({
-            "chunk_id": chunk_id,
-            "text": text,
-            "score": round(score, 4),
-            "citation": chunk_id,  # source_doc_id tracking; refine with real doc metadata
-        })
+    for ranked_list in ranked_lists:
+        for rank, (chunk_id, _original_score) in enumerate(ranked_list, start=1):
+            fused_scores[chunk_id] = fused_scores.get(chunk_id, 0.0) + 1.0 / (k + rank)
 
-    # 2. Graph expansion: check if the query itself matches a known entity
-    #    name, and if so pull related entities up to two hops away.
-    #    (A stronger version would run NER on the query — good enough for v1.)
-    related_entities = []
-    matched_entity = find_entity_by_name(query.strip())
-    if matched_entity:
-        related_entities = two_hop_expansion(matched_entity["name"])
+    result = sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+    return result[:top_k]
 
-    return {
-        "query": query,
-        "results": results,
-        "related_entities": related_entities,
-    }
+
+@observe()
+def hybrid_search(query: str, vector_index, bm25_index, fuzzy_index, top_k: int = 5):
+    """Runs all three retrievers and fuses results. Import indexes at call site
+    to avoid circular imports."""
+    vector_results = vector_index.search(query, top_k=10)
+    bm25_results = bm25_index.search(query, top_k=10)
+    fuzzy_results = fuzzy_index.search(query, top_k=10)
+
+    return reciprocal_rank_fusion(
+        [vector_results, bm25_results, fuzzy_results],
+        top_k=top_k,
+    )
