@@ -3,14 +3,30 @@ FalkorDB client wrapper. FalkorDB speaks OpenCypher, so all queries below
 are Cypher — useful to know if you want to poke around with FalkorDB's
 own browser UI too.
 """
+import os
+
+from dotenv import load_dotenv
 from falkordb import FalkorDB
-from app.config import settings
+
 from app.models.schemas import Entity, Relationship
+
+load_dotenv()
+
+FALKORDB_HOST = os.environ["FALKORDB_HOST"]
+FALKORDB_PORT = int(os.environ["FALKORDB_PORT"])
+FALKORDB_USERNAME = os.environ.get("FALKORDB_USERNAME", "falkordb")
+FALKORDB_PASSWORD = os.environ["FALKORDB_PASSWORD"]
+FALKORDB_GRAPH_NAME = os.environ.get("FALKORDB_GRAPH_NAME", "memoragraph")
 
 
 def get_graph():
-    db = FalkorDB(host=settings.falkordb_host, port=settings.falkordb_port)
-    return db.select_graph(settings.falkordb_graph_name)
+    db = FalkorDB(
+        host=FALKORDB_HOST,
+        port=FALKORDB_PORT,
+        username=FALKORDB_USERNAME,
+        password=FALKORDB_PASSWORD,
+    )
+    return db.select_graph(FALKORDB_GRAPH_NAME)
 
 
 def add_entity(entity: Entity) -> None:
