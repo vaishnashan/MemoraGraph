@@ -6,6 +6,10 @@
 2.To run mcp
   python -m application.mcp.server
 
+
+npx @modelcontextprotocol/inspector python -m application.mcp.server
+
+
 docker compose down --remove-orphans
 docker compose build --no-cache
 docker compose up memoragraph-api

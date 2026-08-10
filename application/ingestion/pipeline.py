@@ -44,7 +44,7 @@ def ingest_file(local_path: str, filename: str, user_id: str) -> dict:
     db.upload_raw_file(local_path, storage_path)
     db.save_document_metadata(DocumentMetadata(
         doc_id=doc_id,
-        filename=parsed.filename,
+        filename=filename,
         file_type=parsed.file_type,
         user_id=user_id,
         raw_storage_path=storage_path,
@@ -75,7 +75,7 @@ def ingest_file(local_path: str, filename: str, user_id: str) -> dict:
     print(f"[ingest] DONE doc_id={doc_id}")
     return {
         "doc_id": doc_id,
-        "filename": parsed.filename,
+        "filename": filename,
         "num_chunks": len(chunks),
         "status": "ingested",
     }
