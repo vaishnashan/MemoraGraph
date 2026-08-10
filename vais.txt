@@ -17,25 +17,10 @@ docker compose up memoragraph-api
 docker compose run --rm memoragraph-mcp
 
 
-
+docker compose down --remove-orphans
 docker compose build --no-cache
+docker compose up memoragraph-api
 docker compose up -d memoragraph-api
 http://localhost:8000/docs
 docker compose run --rm memoragraph-mcp
 
-# Build both images (one build, since both services use the same Dockerfile)
-docker compose build
-
-# Terminal 1 — start the API
-docker compose up memoragraph-api
-
-# Terminal 2 — verify it's healthy
-curl http://localhost:8000/health
-
-# Terminal 3 — run the MCP server interactively
-docker compose run --rm memoragraph-mcp
-
-
-# 4. Now run them
-docker compose up memoragraph-api
-docker compose run --rm memoragraph-mcp
