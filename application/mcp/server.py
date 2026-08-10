@@ -1,42 +1,41 @@
 """
 MCP server — the "doorway" that lets external AI agents (Claude, a
-LangGraph app, etc.) call your backend as tools, without knowing how
-any of it is implemented internally.
+LangGraph app, etc.) call MemoraGraph as tools, without knowing how any
+of it is implemented internally. This is the ONLY place search/read/
+memory-management operations are exposed — the ingestion FastAPI app
+(application/ingestion) has no /search route at all.
 
-Exposes 11 tools now:
-  Original 6:
+Exposes 11 tools:
     1. store_memory          (write)
     2. search_memory          (read)  — fused hybrid (vector+BM25+fuzzy)
-    3. find_related_entities  (read)  — 2-hop graph expansion
-    4. get_document_context   (read)
-    5. update_memory          (sensitive)
-    6. forget_memory          (sensitive, requires confirm=true)
-
-  New — give the agent more granular control instead of only the
-  black-box fused search:
-    7. search_chunks          (read)  — raw vector-only top-k, no fusion
-    8. find_entity            (read)  — direct entity lookup by name, no hop expansion
-    9. list_documents         (read)  — every doc a user has uploaded
-   10. list_memories          (read)  — every active memory for a user
+    3. search_chunks          (read)  — raw vector-only top-k, no fusion
+    4. find_related_entities  (read)  — 2-hop graph expansion
+    5. find_entity            (read)  — direct entity lookup by name, no hop expansion
+    6. get_document_context   (read)
+    7. list_documents         (read)  — every doc a user has uploaded
+    8. list_memories          (read)  — every active memory for a user
+    9. update_memory          (sensitive)
+   10. forget_memory          (sensitive, requires confirm=true)
    11. get_audit_log          (read)  — which tool touched what, and when
 
 Run with:
-    python -m application.mcp_server.server
+    python -m application.mcp.server
 """
 import asyncio
+import json
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
-import json
 
-from application.memory7.lifecycle import store_memory, update_memory, forget_memory, get_document_context
-from application.retrieval5.rrf_fusion import hybrid_search
-from application.retrieval5.vector_search import vector_index
-from application.retrieval5.bm25_search import bm25_index
-from application.retrieval5.fuzzy_search import fuzzy_index
-from application.graph2.falkordb_client import two_hop_expansion, find_entity_by_name
-from application.storage1 import supabase_client as db
-from application.security10.permissions import check_permission, audit_log, get_audit_log, ToolRisk, PermissionDenied
+from application.mcp.lifecycle import store_memory, update_memory, forget_memory, get_document_context
+from application.mcp.rrf_fusion import hybrid_search
+from application.mcp.vector_search import vector_index
+from application.mcp.bm25_search import bm25_index
+from application.mcp.fuzzy_search import fuzzy_index
+from application.mcp.falkordb_client import two_hop_expansion, find_entity_by_name
+from application.mcp import supabase_client as db
+from application.mcp.security import check_permission, audit_log, get_audit_log, ToolRisk, PermissionDenied
 
 server = Server("memoragraph")
 

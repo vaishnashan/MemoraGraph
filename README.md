@@ -1,117 +1,129 @@
 # MemoraGraph
 
-**Private Multimodal AI Memory Infrastructure with MCP**
+Private multimodal AI memory infrastructure, exposed to AI agents via MCP.
 
-A reusable personal or organisational memory service that AI assistants can call as a tool — not another chat window. MemoraGraph stores information, retrieves relevant memories via hybrid search, identifies entities and relationships, tracks memory lifecycle (active/outdated/superseded), and exposes all of this through the **Model Context Protocol (MCP)** so external agents (Claude, a LangGraph app, etc.) can use it directly.
+`application/` has exactly two folders in it, on purpose:
 
-## Architecture
+- **`application/ingestion`** — a tiny FastAPI app with exactly two HTTP endpoints:
+  `GET /health` and `POST /upload`. Its only job is to take a file in and run it
+  through the write-time pipeline (parse → chunk → embed → store → extract
+  entities/relations → graph write). Nothing else is exposed over HTTP.
+- **`application/mcp`** — the MCP server. This is the *only* place search and
+  memory-management operations live (`search_memory`, `store_memory`,
+  `find_related_entities`, `update_memory`, `forget_memory`, etc. — 11 tools
+  total). AI agents talk to it over stdio via MCP, not HTTP.
 
-```mermaid
-flowchart TD
-    U["User uploads PDF / DOCX / XLSX / Image"] --> UP["FastAPI /upload"]
-    UP --> DOC["Docling parser<br/>(HybridChunker)"]
-    DOC --> CH["Chunks"]
+Everything else both apps depend on — config, schemas, parsing, embeddings,
+storage, the graph client, retrieval, memory lifecycle — is a flat module
+directly under `application/`, not its own folder. Both `ingestion` and `mcp`
+import from these the same way; neither owns them.
 
-    CH --> ST["Supabase<br/>raw file + metadata"]
-    CH --> EMB["sentence-transformers<br/>embeddings"]
-    CH --> ENT["Groq/Gemini<br/>entity extraction"]
+## Project layout
 
-    EMB --> VEC["Vector index"]
-    CH --> BM25["BM25 index"]
-    CH --> FUZ["Fuzzy index"]
+```
+application/
+  __init__.py
+  config.py              # every env var, read once, in one place
+  schemas.py              # shared Pydantic models
+  security.py              # permission checks + audit log
+  docling_parser.py         # PDF/DOCX/XLSX/image -> structured chunks
+  embedder.py                # local sentence-transformers embeddings
+  supabase_client.py           # raw files, document/memory metadata, indexed_texts
+  falkordb_client.py            # entity/relationship graph, 2-hop expansion
+  entity_extraction.py           # LLM (Groq) entity/relation extraction
+  vector_search.py                # dense retrieval
+  bm25_search.py                    # keyword retrieval (Postgres full-text)
+  fuzzy_search.py                     # trigram retrieval
+  rrf_fusion.py                        # combines the three into one ranked list
+  lifecycle.py                          # store/update/forget, dedup, active/superseded
 
-    ENT --> RES["Entity resolution<br/>(merge by name+type)"]
-    RES --> FDB["FalkorDB<br/>graph store"]
+  ingestion/
+    __init__.py
+    main.py                # FastAPI app: /health, /upload ONLY
+    pipeline.py             # the actual write-time pipeline logic
 
-    Q["User query"] --> SR["FastAPI /search"]
-    SR --> VEC
-    SR --> BM25
-    SR --> FUZ
-    VEC --> RRF["Reciprocal Rank Fusion"]
-    BM25 --> RRF
-    FUZ --> RRF
-    RRF --> HOP["Two-hop graph expansion"]
-    FDB --> HOP
-    HOP --> OUT["Ranked results + citations + related entities"]
+  mcp/
+    __init__.py
+    server.py                # MCP server, 11 tools, stdio transport
 
-    AGENT["External AI agent<br/>(Claude, LangGraph, etc.)"] --> MCP["MCP server"]
-    MCP --> SM["store_memory"]
-    MCP --> SEM["search_memory"]
-    MCP --> FRE["find_related_entities"]
-    MCP --> GDC["get_document_context"]
-    MCP --> UPM["update_memory"]
-    MCP --> FGM["forget_memory"]
-    SEM --> RRF
-    FRE --> FDB
-    GDC --> ST
-    GDC --> FDB
+schema.sql                 # run once in Supabase SQL editor
+requirements.txt
+.env.example
+Dockerfile
+docker-compose.yml
+scripts/smoke_test.py       # local end-to-end test, no server needed
 ```
 
-## Tech Stack
+## Design notes
 
-| Layer | Tool |
-|---|---|
-| Document parsing | Docling (PDF, DOCX, XLSX, images) |
-| Chunking | Docling HybridChunker (tokenizer-aware, structure-aware) |
-| Embeddings | sentence-transformers (`all-MiniLM-L6-v2`), fully local |
-| Raw storage / metadata | Supabase |
-| Graph store | FalkorDB (property graph, OpenCypher) |
-| Entity extraction | Groq (Llama 3.3 70B) / Gemini |
-| Retrieval | Vector + BM25 + fuzzy, fused via RRF |
-| Tool interface | Model Context Protocol (MCP) server |
-| Backend | FastAPI |
-| Observability | Langfuse tracing |
-| Deployment | Docker Compose, GitHub Actions |
+- **No FastAPI `/search` route.** Search is agent-facing only — it lives
+  solely in the MCP server (`search_memory`, `search_chunks` tools).
+  `application/ingestion` truly only ingests.
+- **Pipeline logic is separate from the HTTP route.** `ingestion/pipeline.py`
+  does the actual work; `ingestion/main.py` is a thin HTTP layer that saves
+  the upload to disk and calls `pipeline.ingest_file(...)`. This means the
+  same pipeline is callable from a script or test without spinning up FastAPI.
+- **One config module.** Every environment variable is read in `config.py`
+  and exposed as `settings`. No other file calls `os.environ[...]` or
+  `load_dotenv()` directly — this catches missing/misspelled env vars at
+  import time instead of deep inside a request.
+- **`documents` and `memories` tables were missing from the original
+  `schema.sql`** even though the code queries them — fixed, both are defined
+  now.
+- **FalkorDB SSL wasn't being read** even though `.env` had `FALKORDB_SSL` —
+  fixed, `falkordb_client.py` now passes it through.
+- `rank_bm25` / `rapidfuzz` removed from `requirements.txt` — unused, since
+  BM25 and fuzzy matching both run in Postgres now, not in-process.
 
-## Setup
+## Running locally
 
-1. Clone the repo and create a virtualenv:
+1. **Install dependencies**
    ```bash
-   python -m venv venv
-   venv\Scripts\activate      # Windows
+   python -m venv venv && source venv/bin/activate   # or venv\Scripts\activate on Windows
+   pip install torch --index-url https://download.pytorch.org/whl/cpu
    pip install -r requirements.txt
    ```
 
-2. Copy `.env.example` to `.env` and fill in:
-   - `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_STORAGE_BUCKET`
-   - `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_PASSWORD`
-   - `GROQ_API_KEY` (or `GEMINI_API_KEY`)
-   - `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
+2. **Set up Supabase**
+   - Create a project at supabase.com (or use your existing one).
+   - Open the SQL Editor and run all of `schema.sql`.
+   - Create a Storage bucket and note its name.
 
-3. Run the server:
+3. **Set up FalkorDB** — easiest is Docker:
    ```bash
-   uvicorn application.main:app --reload
+   docker run -p 6379:6379 -it --rm falkordb/falkordb:latest
+   ```
+   (Or use FalkorDB Cloud — set `FALKORDB_SSL=true` in that case.)
+
+4. **Copy `.env.example` to `.env`** and fill in every value: Supabase URL/key/bucket,
+   FalkorDB host/port/password, your Groq API key. Langfuse vars are optional.
+
+5. **Run the ingestion API**
+   ```bash
+   uvicorn application.ingestion.main:app --reload
+   ```
+   Check `http://localhost:8000/health`, then upload a file:
+   ```bash
+   curl -F "user_id=me" -F "file=@/path/to/some.pdf" http://localhost:8000/upload
    ```
 
-4. Open `http://localhost:8000/docs` to try `/upload` and `/search`.
+6. **Run the MCP server** (separate terminal)
+   ```bash
+   python -m application.mcp.server
+   ```
+   Inspect it with the official MCP inspector if you want a UI to poke at the tools:
+   ```bash
+   npx @modelcontextprotocol/inspector python -m application.mcp.server
+   ```
 
-## Running the evaluation suite
+7. **Or run the full pipeline without any server**, for a quick sanity check:
+   ```bash
+   python scripts/smoke_test.py /path/to/file.pdf "some query in that file"
+   ```
+
+## Docker
 
 ```bash
-python eval/run_eval.py          # Recall@5 / MRR
-python eval/accuracy_checks.py   # entity extraction, citation, groundedness
-python eval/latency_check.py     # retrieval latency + tool-selection baseline
+docker compose up memoragraph-ingestion          # ingestion API on :8000
+docker compose run --rm memoragraph-mcp          # MCP server, interactive stdio
 ```
-
-## Running via Docker
-
-```bash
-docker compose up --build
-```
-
-## MCP Tools Exposed
-
-| Tool | Purpose |
-|---|---|
-| `store_memory` | Write a new memory (with duplicate detection) |
-| `search_memory` | Hybrid search (vector + BM25 + fuzzy, RRF-fused) |
-| `find_related_entities` | Two-hop graph expansion around an entity |
-| `get_document_context` | Full context on a source document |
-| `update_memory` | Versioned update (marks old as superseded) |
-| `forget_memory` | Deletion, requires explicit confirmation |
-
-## Project Positioning
-
-MemoraGraph demonstrates reusable AI infrastructure, multimodal ingestion, persistent and temporal memory, MCP server engineering, privacy and permissions, write-time knowledge extraction, and memory lifecycle management.
-
-*Note: "MCP" refers to the open Model Context Protocol specification, not an Anthropic-specific term.*

@@ -37,11 +37,9 @@ from docling.chunking import HybridChunker
 from docling_core.types.doc.document import DoclingDocument
 from transformers import AutoTokenizer
 
-from application.models6.schemas import Chunk
+from application.ingestion.config import settings
+from application.ingestion.schemas import Chunk
 
-# Must match the embedding model used downstream — keeps chunk sizing and
-# embedding aligned to the same model's token limits.
-EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 MAX_TOKENS = 460
 
 SUPPORTED_EXTENSIONS = {"pdf", "docx", "xlsx", "png", "jpg", "jpeg", "tiff", "bmp"}
@@ -52,7 +50,9 @@ IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "tiff", "bmp"}
 ENABLE_OCR = os.environ.get("DOCLING_ENABLE_OCR", "false").lower() == "true"
 ENABLE_TABLE_STRUCTURE = os.environ.get("DOCLING_ENABLE_TABLES", "false").lower() == "true"
 
-_tokenizer = AutoTokenizer.from_pretrained(EMBED_MODEL_ID)
+# Must match the embedding model used downstream — keeps chunk sizing and
+# embedding aligned to the same model's token limits.
+_tokenizer = AutoTokenizer.from_pretrained(settings.embedding_model)
 _chunker = HybridChunker(tokenizer=_tokenizer, max_tokens=MAX_TOKENS, merge_peers=True)
 
 _pdf_options = PdfPipelineOptions()
@@ -137,7 +137,7 @@ def chunk_document(parsed: ParsedDocument) -> list[Chunk]:
 
 
 def parse_and_chunk(file_path: str, doc_id: str) -> tuple[ParsedDocument, list[Chunk]]:
-    """Convenience wrapper: parse then chunk in one call — what upload.py uses."""
+    """Convenience wrapper: parse then chunk in one call — what the ingestion pipeline uses."""
     parsed = parse_document(file_path, doc_id)
     chunks = chunk_document(parsed)
     return parsed, chunks

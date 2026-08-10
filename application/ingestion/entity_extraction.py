@@ -2,30 +2,21 @@
 Extracts entities and relationships from a text chunk using an LLM,
 at write time (upload), not at query time — keeps retrieval fast.
 
-Provider: Groq (free tier, fast, Llama 3.3 70B by default)
+Provider: Groq (free tier, fast, Llama 3.3 70B by default). Model and key
+are pulled from application.config so this file has no direct env reads.
 
-Required env vars:
-    GROQ_API_KEY
-    EXTRACTION_MODEL   (optional override, defaults to llama-3.3-70b-versatile)
-
-Langfuse tracing (Day 4): both the raw LLM call and the overall extraction
+Langfuse tracing: both the raw LLM call and the overall extraction
 function are wrapped with @observe() so each shows up as a nested span
-under whichever route (e.g. /upload) triggered it.
+under whichever route (e.g. ingestion /upload) triggered it.
 """
 import json
-import os
 import uuid
 
-from dotenv import load_dotenv
 from groq import Groq
 from langfuse import observe
 
-from application.models6.schemas import Entity, Relationship
-
-load_dotenv()
-
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]
-EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "llama-3.3-70b-versatile")
+from application.ingestion.config import settings
+from application.ingestion.schemas import Entity, Relationship
 
 EXTRACTION_PROMPT = """Extract entities and relationships from the text below.
 Return ONLY valid JSON, no other text, in this exact shape:
@@ -42,9 +33,9 @@ Text:
 
 @observe()
 def _call_groq(prompt: str) -> str:
-    client = Groq(api_key=GROQ_API_KEY)
+    client = Groq(api_key=settings.groq_api_key)
     response = client.chat.completions.create(
-        model=EXTRACTION_MODEL,
+        model=settings.groq_extraction_model,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content

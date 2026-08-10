@@ -1,22 +1,21 @@
 """
-Generates local embeddings using sentence-transformers — replaces Ollama.
-Runs fully on-device (no API calls), so private content never leaves the
-machine (Security requirement: local embedding mode).
+Generates local embeddings using sentence-transformers. Runs fully
+on-device (no API calls), so private content never leaves the machine
+(Security requirement: local embedding mode).
 
 Model: sentence-transformers/all-MiniLM-L6-v2 by default — this matches
 the tokenizer docling_parser.py's HybridChunker is built against, so
 chunk sizing and embedding stay aligned to the same model's token limits.
-Override via EMBED_MODEL_ID in .env if you want a different model later.
+Override via EMBEDDING_MODEL in .env if you want a different model later
+(and update the `vector(384)` dimension in schema.sql to match).
 """
-import os
-
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-EMBED_MODEL_ID = os.environ.get("EMBED_MODEL_ID", "sentence-transformers/all-MiniLM-L6-v2")
+from application.ingestion.config import settings
 
 # Loaded once at import time — reused across every embed call.
-_model = SentenceTransformer(EMBED_MODEL_ID)
+_model = SentenceTransformer(settings.embedding_model)
 
 
 def embed_text(text: str) -> list[float]:

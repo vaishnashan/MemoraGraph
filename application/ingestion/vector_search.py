@@ -1,0 +1,31 @@
+"""
+Dense vector retrieval — backed by Supabase Postgres + pgvector (see
+schema.sql). Data survives restarts, and the ingestion process and the
+MCP server process see the SAME data, since both read/write the same
+Postgres table.
+"""
+from application.ingestion.embedder import embed_text
+from application.ingestion import supabase_client as db
+
+
+class VectorIndex:
+    def add(self, chunk_id: str, text: str, embedding: list[float], doc_id: str) -> None:
+        db.upsert_indexed_text(chunk_id, text, embedding=embedding, doc_id=doc_id)
+
+    def search(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
+        """Returns list of (chunk_id, similarity_score), best first."""
+        query_emb = embed_text(query)
+        rows = db.vector_search(query_emb, top_k=top_k)
+        return [(row["item_id"], row["score"]) for row in rows]
+
+    def get_text(self, chunk_id: str) -> str | None:
+        return db.get_indexed_text(chunk_id)
+
+    def get_chunks_by_doc(self, doc_id: str) -> list[str]:
+        """Used by get_document_context — all chunk texts belonging to a document."""
+        return db.get_texts_by_doc(doc_id)
+
+
+# Single shared instance for the app — a thin wrapper over Postgres,
+# not actual storage, so it's safe/cheap to share across modules.
+vector_index = VectorIndex()

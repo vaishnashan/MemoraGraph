@@ -1,26 +1,15 @@
-python -m application.graph2.test_falkordb    
-
-python -m application.graph2.test_entity_extraction_gemini
-
-python -m application.graph2.test_entity_extraction_groq  
+1. To run ingestion
+ uvicorn application.ingestion.main:app --reload 
+ http://localhost:8000/docs
 
 
-python -m application.parsing3.test_docling
-
-python -m application.embeddings.testembed   
-uvicorn application.main:app --reload
-
-python -m application.mcp_server8.server
-npx @modelcontextprotocol/inspector python -m application.mcp_server8.server
-
-docker compose up memoragraph-api
-docker compose run --rm memoragraph-mcp
-
+2.To run mcp
+  python -m application.mcp.server
 
 docker compose down --remove-orphans
 docker compose build --no-cache
 docker compose up memoragraph-api
 docker compose up -d memoragraph-api
-http://localhost:8000/docs
+
 docker compose run --rm memoragraph-mcp
 

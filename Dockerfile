@@ -1,5 +1,5 @@
-# MemoraGraph — FastAPI backend
-# FalkorDB and Supabase are cloud-hosted (see .env), so only the app
+# MemoraGraph — backend only (ingestion API + MCP server)
+# FalkorDB and Supabase are cloud/external (see .env), so only the app
 # itself needs containerizing.
 
 FROM python:3.11-slim
@@ -10,6 +10,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -25,4 +26,6 @@ COPY application ./application
 
 EXPOSE 8000
 
-CMD ["uvicorn", "application.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default: run the ingestion API. The MCP server overrides this command
+# (see docker-compose.yml's memoragraph-mcp service).
+CMD ["uvicorn", "application.ingestion.main:app", "--host", "0.0.0.0", "--port", "8000"]

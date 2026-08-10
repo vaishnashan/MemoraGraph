@@ -1,7 +1,7 @@
 """
-Pydantic models shared across parsing, storage, retrieval, graph, and MCP layers.
-Keeping these in one place means the MCP tool schemas and the internal
-function signatures never drift apart.
+Pydantic models shared across parsing, storage, retrieval, graph, ingestion,
+and MCP. Keeping these in one place means the MCP tool schemas and the
+internal function signatures never drift apart.
 """
 from datetime import datetime
 from enum import Enum
@@ -18,7 +18,7 @@ class MemoryStatus(str, Enum):
 class DocumentMetadata(BaseModel):
     doc_id: str
     filename: str
-    file_type: str  # "pdf" | "docx"
+    file_type: str  # "pdf" | "docx" | "xlsx" | "png" | "jpg" | ...
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
     user_id: str
     raw_storage_path: str

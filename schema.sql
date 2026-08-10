@@ -1,21 +1,43 @@
--- MemoraGraph — persisted retrieval schema
+-- MemoraGraph — Supabase schema
 -- Run this ONCE in the Supabase SQL Editor (Project -> SQL Editor -> New query).
---
--- Replaces the old in-memory VectorIndex / BM25Index / FuzzyIndex with one
--- Postgres table + pgvector + full-text search + trigram fuzzy matching.
--- This is what both the FastAPI process and the MCP server process read
--- from and write to, so data no longer disappears on restart and both
--- processes see the same data.
 
 -- 1. Extensions -----------------------------------------------------------
 create extension if not exists vector;
 create extension if not exists pg_trgm;
 
--- 2. Unified table ----------------------------------------------------------
+-- 2. Documents (raw file metadata; the actual file bytes live in Storage) --
+create table if not exists documents (
+    doc_id            text primary key,
+    filename          text not null,
+    file_type         text not null,
+    uploaded_at       timestamptz default now(),
+    user_id           text not null,
+    raw_storage_path  text not null
+);
+
+create index if not exists documents_user_id_idx on documents (user_id);
+
+-- 3. Memories (lifecycle: active / outdated / superseded) -----------------
+create table if not exists memories (
+    memory_id      text primary key,
+    doc_id         text,
+    text           text not null,
+    status         text not null default 'active',
+    created_at     timestamptz default now(),
+    updated_at     timestamptz default now(),
+    superseded_by  text,
+    source_doc_id  text
+);
+
+create index if not exists memories_status_idx on memories (status);
+
+-- 4. Unified retrieval table ------------------------------------------------
 -- Holds BOTH document chunks (from /upload) and standalone memories
--- (from store_memory) — same as the old in-memory indexes did, just persisted.
+-- (from store_memory) — one row per chunk_id/memory_id.
 --
--- embedding dimension = 384, matching sentence-transformers/all-MiniLM-L6-v2
+-- embedding dimension = 384, matching sentence-transformers/all-MiniLM-L6-v2.
+-- If you change EMBEDDING_MODEL in .env to a model with a different output
+-- size, update the `vector(384)` below (and the match_* functions) to match.
 create table if not exists indexed_texts (
     item_id     text primary key,      -- chunk_id OR memory_id
     doc_id      text,
@@ -26,7 +48,7 @@ create table if not exists indexed_texts (
     created_at  timestamptz default now()
 );
 
--- 3. Indexes ----------------------------------------------------------------
+-- 5. Indexes ----------------------------------------------------------------
 -- Vector similarity (cosine distance) — powers vector_search()
 create index if not exists indexed_texts_embedding_idx
     on indexed_texts using hnsw (embedding vector_cosine_ops);
@@ -42,7 +64,7 @@ create index if not exists indexed_texts_trgm_idx
 create index if not exists indexed_texts_doc_id_idx
     on indexed_texts (doc_id);
 
--- 4. RPC functions (called from Python via client.rpc(...)) -----------------
+-- 6. RPC functions (called from Python via client.rpc(...)) -----------------
 
 -- Dense vector similarity search
 create or replace function match_vector(
@@ -109,3 +131,16 @@ as $$
     order by it.embedding <=> query_embedding
     limit 1;
 $$;
+
+-- 7. (Optional, not wired up yet) Audit log table ----------------------------
+-- application/core/security.py currently keeps the audit log in memory,
+-- which resets on every restart. Swap it to write here when you want the
+-- audit trail to persist:
+-- create table if not exists audit_logs (
+--     id          bigserial primary key,
+--     user_id     text,
+--     tool_name   text,
+--     memory_id   text,
+--     action      text,
+--     created_at  timestamptz default now()
+-- );

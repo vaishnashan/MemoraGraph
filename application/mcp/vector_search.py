@@ -1,16 +1,11 @@
 """
-Dense vector retrieval — now backed by Supabase Postgres + pgvector
-(see sql/schema.sql), instead of an in-memory dict. This means:
-  - Data survives restarts.
-  - The FastAPI process and the MCP server process see the SAME data,
-    since both read/write the same Postgres table.
-
-Interface (add / search / get_text / get_chunks_by_doc) is kept
-identical to the old in-memory version, so upload.py, search.py, and
-mcp_server/server.py don't need to change how they call this.
+Dense vector retrieval — backed by Supabase Postgres + pgvector (see
+schema.sql). Data survives restarts, and the ingestion process and the
+MCP server process see the SAME data, since both read/write the same
+Postgres table.
 """
-from application.embeddings4.embedd import embed_text
-from application.storage1 import supabase_client as db
+from application.mcp.embedder import embed_text
+from application.mcp import supabase_client as db
 
 
 class VectorIndex:
@@ -31,6 +26,6 @@ class VectorIndex:
         return db.get_texts_by_doc(doc_id)
 
 
-# Single shared instance for the app — now a thin wrapper over Postgres,
+# Single shared instance for the app — a thin wrapper over Postgres,
 # not actual storage, so it's safe/cheap to share across modules.
 vector_index = VectorIndex()

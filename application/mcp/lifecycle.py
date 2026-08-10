@@ -5,20 +5,19 @@ active / outdated / superseded instead of just deleting or piling on.
 Also home to get_document_context, which pulls together everything known
 about a source document (metadata + extracted entities + stored chunks).
 
-Persistence note: duplicate detection now uses one indexed Postgres
-query (find_duplicate_memory, via the match_active_memory RPC) instead
-of looping over every active memory in Python and re-embedding each one
-on every single store_memory() call — same result, far less work as
-your memory count grows. Storing a memory is now also a single
-vector_index.add() call instead of three separate index writes, since
+Duplicate detection uses one indexed Postgres query (find_duplicate_memory,
+via the match_active_memory RPC) instead of looping over every active
+memory in Python and re-embedding each one on every single store_memory()
+call. Storing a memory is a single vector_index.add() call, since
 BM25/fuzzy are derived automatically from the same Postgres row.
 """
 import uuid
-from application.models6.schemas import MemoryRecord, MemoryStatus
-from application.embeddings4.embedd import embed_text
-from application.storage1 import supabase_client as db
-from application.retrieval5.vector_search import vector_index
-from application.graph2.falkordb_client import get_entities_by_doc_id
+
+from application.mcp.schemas import MemoryRecord, MemoryStatus
+from application.mcp.embedder import embed_text
+from application.mcp import supabase_client as db
+from application.mcp.vector_search import vector_index
+from application.mcp.falkordb_client import get_entities_by_doc_id
 
 DUPLICATE_SIMILARITY_THRESHOLD = 0.95
 
@@ -47,7 +46,7 @@ def store_memory(text: str, doc_id: str | None = None) -> tuple[MemoryRecord, st
     db.save_memory(record)
 
     # Index it for retrieval immediately (write-time processing) — one
-    # write covers vector, BM25, and fuzzy search all at once now.
+    # write covers vector, BM25, and fuzzy search all at once.
     embedding = embed_text(text)
     vector_index.add(memory_id, text, embedding, doc_id or "")
 
@@ -86,7 +85,7 @@ def forget_memory(memory_id: str, confirmed: bool) -> tuple[bool, str]:
     if not record:
         return False, f"Memory {memory_id} not found."
 
-    db.delete_memory(memory_id)  # also removes it from indexed_texts now
+    db.delete_memory(memory_id)  # also removes it from indexed_texts
     return True, f"Memory {memory_id} deleted."
 
 

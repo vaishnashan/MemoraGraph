@@ -1,35 +1,29 @@
 """
-Handles raw file storage + document/memory metadata in Supabase, AND
-(new) the persisted retrieval store: vector / BM25 / fuzzy search all
-live in one Postgres table (`indexed_texts`) instead of in-memory dicts.
+Handles raw file storage + document/memory metadata in Supabase, plus the
+persisted retrieval store: vector / BM25 / fuzzy search all live in one
+Postgres table (`indexed_texts`) instead of in-memory dicts.
 
-Run sql/schema.sql once in the Supabase SQL Editor before using the
-functions below — it creates the pgvector/pg_trgm extensions, the
-`indexed_texts` table, and the RPC functions this file calls.
+Run schema.sql once in the Supabase SQL Editor before using the functions
+below — it creates the pgvector/pg_trgm extensions, the `documents`,
+`memories`, and `indexed_texts` tables, and the RPC functions this file calls.
 """
-import os
-from dotenv import load_dotenv
 from supabase import create_client, Client
-from application.models6.schemas import DocumentMetadata, MemoryRecord, MemoryStatus
 
-load_dotenv()
-
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_SECRET_KEY = os.environ["SUPABASE_SECRET_KEY"]
-SUPABASE_BUCKET = os.environ["SUPABASE_STORAGE_BUCKET"]
+from application.mcp.config import settings
+from application.mcp.schemas import DocumentMetadata, MemoryRecord, MemoryStatus
 
 
 def get_client() -> Client:
-    return create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+    return create_client(settings.supabase_url, settings.supabase_secret_key)
 
 
-# ---------- Raw file + document metadata (unchanged) ----------
+# ---------- Raw file + document metadata ----------
 
 def upload_raw_file(local_path: str, storage_path: str) -> str:
     """Upload the original file to Supabase Storage. Returns storage path."""
     client = get_client()
     with open(local_path, "rb") as f:
-        client.storage.from_(SUPABASE_BUCKET).upload(storage_path, f)
+        client.storage.from_(settings.supabase_storage_bucket).upload(storage_path, f)
     return storage_path
 
 
@@ -54,8 +48,7 @@ def list_documents_by_user(user_id: str) -> list[DocumentMetadata]:
     return [DocumentMetadata(**row) for row in res.data]
 
 
-
-# ---------- Memory records (unchanged) ----------
+# ---------- Memory records ----------
 
 def save_memory(memory: MemoryRecord) -> None:
     client = get_client()
@@ -93,9 +86,8 @@ def list_active_memories(user_id: str | None = None) -> list[MemoryRecord]:
     return [MemoryRecord(**row) for row in res.data]
 
 
-# ---------- Persisted retrieval store (new) ----------
-# One row per chunk_id/memory_id. Replaces the old in-memory VectorIndex,
-# BM25Index, and FuzzyIndex — a single write here makes the item
+# ---------- Persisted retrieval store ----------
+# One row per chunk_id/memory_id. A single write here makes the item
 # searchable by all three retrieval methods, since BM25 (tsvector) and
 # fuzzy (trigram) are computed by Postgres from the `text` column
 # automatically; only the embedding needs to be supplied explicitly.
@@ -172,10 +164,9 @@ def fuzzy_search(query_text: str, top_k: int = 10) -> list[dict]:
 
 def find_duplicate_memory(query_embedding: list[float], similarity_threshold: float = 0.95) -> str | None:
     """
-    Used by memory/lifecycle.py's duplicate detection. Replaces the old
-    approach of looping over every active memory in Python and embedding
-    each one on every store_memory() call — this does it in one indexed
-    Postgres query instead.
+    Used by memory/lifecycle.py's duplicate detection. Does the nearest-
+    neighbor check in one indexed Postgres query instead of looping over
+    every active memory in Python and re-embedding each one.
     """
     client = get_client()
     res = client.rpc(

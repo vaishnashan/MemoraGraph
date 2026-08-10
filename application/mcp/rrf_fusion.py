@@ -7,10 +7,16 @@ where rank is 1-indexed position in that list. k=60 is the standard
 default from the original RRF paper — no need to tune unless you have
 a reason to.
 
-Langfuse tracing (Day 4): hybrid_search is wrapped with @observe() so
-you get retrieval latency + inputs/outputs in the trace.
+This is the ONLY place hybrid_search lives now (previously duplicated in
+both routes9/search.py and here) — the search_memory MCP tool calls it
+directly. There is no FastAPI /search route anymore; search is an
+agent-facing capability exposed only through MCP.
 """
 from langfuse import observe
+
+from application.mcp.vector_search import VectorIndex
+from application.mcp.bm25_search import BM25Index
+from application.mcp.fuzzy_search import FuzzyIndex
 
 
 def reciprocal_rank_fusion(
@@ -29,9 +35,14 @@ def reciprocal_rank_fusion(
 
 
 @observe()
-def hybrid_search(query: str, vector_index, bm25_index, fuzzy_index, top_k: int = 5):
-    """Runs all three retrievers and fuses results. Import indexes at call site
-    to avoid circular imports."""
+def hybrid_search(
+    query: str,
+    vector_index: VectorIndex,
+    bm25_index: BM25Index,
+    fuzzy_index: FuzzyIndex,
+    top_k: int = 5,
+) -> list[tuple[str, float]]:
+    """Runs all three retrievers and fuses results."""
     vector_results = vector_index.search(query, top_k=10)
     bm25_results = bm25_index.search(query, top_k=10)
     fuzzy_results = fuzzy_index.search(query, top_k=10)
