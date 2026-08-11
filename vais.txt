@@ -8,11 +8,17 @@
 
   npx @modelcontextprotocol/inspector python -m application.mcp.server
 
-3.docker
-  docker compose build --no-cache - runn it once 
 
-  docker compose up memoragraph-ingestion -  Runs in the foreground so you see live logs. Wait for "Application startup complete.
-  docker compose run --rm memoragraph-mcp -  run The mcp service has profiles: 
+3.docker
+  docker compose build --no-cache     
+  docker compose up --build   - after chaning the docker file codes
+
+
+  docker compose build
+  docker compose up memoragraph-ingestion
+  docker compose run --rm memoragraph-mcp
+
   
 http://localhost:8000/docs
 MCP is something a *program launches and talks to*, never something you open in a tab.
+
