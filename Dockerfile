@@ -1,12 +1,7 @@
-# MemoraGraph — backend only (ingestion API + MCP server)
-# FalkorDB and Supabase are cloud/external (see .env), so only the app
-# itself needs containerizing.
-
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps Docling/torch/transformers commonly need at runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -15,17 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-# Install CPU-only PyTorch first
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip uninstall -y torch torchvision torchaudio || true
+
 RUN pip install --no-cache-dir \
-    torch \
+    torch==2.13.0 \
+    torchvision==0.28.0 \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Install the remaining dependencies
-RUN pip install --no-cache-dir -r requirements.txt
 COPY application ./application
 
 EXPOSE 8000
 
-# Default: run the ingestion API. The MCP server overrides this command
-# (see docker-compose.yml's memoragraph-mcp service).
 CMD ["uvicorn", "application.ingestion.main:app", "--host", "0.0.0.0", "--port", "8000"]

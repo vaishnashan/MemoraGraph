@@ -23,7 +23,7 @@ services:
     env_file:
       - .env
     command: ["python", "-m", "application.mcp.server"]
-    stdin_open: true   # required — MCP talks over stdin/stdout
+    stdin_open: true
     tty: true
     profiles:
-      - mcp            # won't start with plain `docker compose up`
+      - mcp

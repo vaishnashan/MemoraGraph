@@ -12,8 +12,8 @@ langfuse
 docling
 docling-core
 
-transformers
-sentence-transformers
+transformers>=4.44,<5.0
+sentence-transformers>=3.0,<5.0
 numpy
 
 mcp
