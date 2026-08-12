@@ -1,168 +1,383 @@
 """
-MCP server — the "doorway" that lets external AI agents (Claude, a
-LangGraph app, etc.) call MemoraGraph as tools, without knowing how any
-of it is implemented internally. This is the ONLY place search/read/
-memory-management operations are exposed — the ingestion FastAPI app
-(application/ingestion) has no /search route at all.
+MemoraGraph MCP Server
+
+This server exposes MemoraGraph operations as MCP tools so external
+AI agents such as Claude or LangGraph applications can interact with
+the memory system.
 
 Exposes 11 tools:
-    1. store_memory          (write)
-    2. search_memory          (read)  — fused hybrid (vector+BM25+fuzzy)
-    3. search_chunks          (read)  — raw vector-only top-k, no fusion
-    4. find_related_entities  (read)  — 2-hop graph expansion
-    5. find_entity            (read)  — direct entity lookup by name, no hop expansion
-    6. get_document_context   (read)
-    7. list_documents         (read)  — every doc a user has uploaded
-    8. list_memories          (read)  — every active memory for a user
-    9. update_memory          (sensitive)
-   10. forget_memory          (sensitive, requires confirm=true)
-   11. get_audit_log          (read)  — which tool touched what, and when
 
-Run with:
+1.  store_memory
+2.  search_memory
+3.  search_chunks
+4.  find_related_entities
+5.  find_entity
+6.  get_document_context
+7.  list_documents
+8.  list_memories
+9.  update_memory
+10. forget_memory
+11. get_audit_log
+
+Run:
+
     python -m application.mcp.server
 """
+
 import asyncio
 import json
+from typing import Any
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+import mcp.server.stdio
 
-from application.mcp.lifecycle import store_memory, update_memory, forget_memory, get_document_context
+from mcp.server.lowlevel import (
+    NotificationOptions,
+    Server,
+)
+
+from mcp.server.models import InitializationOptions
+
+from mcp.types import (
+    Tool,
+    TextContent,
+)
+
+
+# ============================================================
+# APPLICATION IMPORTS
+# ============================================================
+
+from application.mcp.lifecycle import (
+    store_memory,
+    update_memory,
+    forget_memory,
+    get_document_context,
+)
+
 from application.mcp.rrf_fusion import hybrid_search
+
 from application.mcp.vector_search import vector_index
 from application.mcp.bm25_search import bm25_index
 from application.mcp.fuzzy_search import fuzzy_index
-from application.mcp.falkordb_client import two_hop_expansion, find_entity_by_name
+
+from application.mcp.falkordb_client import (
+    two_hop_expansion,
+    find_entity_by_name,
+)
+
 from application.mcp import supabase_client as db
-from application.mcp.security import check_permission, audit_log, get_audit_log, ToolRisk, PermissionDenied
+
+from application.mcp.security import (
+    check_permission,
+    audit_log,
+    get_audit_log,
+    ToolRisk,
+    PermissionDenied,
+)
+
+
+# ============================================================
+# CREATE MCP SERVER
+# ============================================================
 
 server = Server("memoragraph")
 
+
+# ============================================================
+# MCP TOOL DEFINITIONS
+# ============================================================
+
 TOOLS = [
+
+    # ========================================================
+    # 1. STORE MEMORY
+    # ========================================================
+
     Tool(
         name="store_memory",
-        description="Store a new memory (fact, note, or extracted info) in MemoraGraph.",
+        description=(
+            "Store a new memory (fact, note, or extracted info) "
+            "in MemoraGraph."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "text": {"type": "string"},
-                "source_doc_id": {"type": "string"},
+                "user_id": {
+                    "type": "string",
+                },
+                "text": {
+                    "type": "string",
+                },
+                "source_doc_id": {
+                    "type": "string",
+                },
             },
-            "required": ["user_id", "text"],
+            "required": [
+                "user_id",
+                "text",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 2. SEARCH MEMORY
+    # ========================================================
+
     Tool(
         name="search_memory",
-        description="Search stored memories using fused hybrid retrieval (vector + BM25 + fuzzy, combined with RRF) and return ranked results. Best general-purpose search — use this by default.",
+        description=(
+            "Search stored memories using fused hybrid retrieval "
+            "(vector + BM25 + fuzzy, combined with RRF) and return "
+            "ranked results. Best general-purpose search."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "query": {"type": "string"},
-                "top_k": {"type": "integer", "default": 5},
+                "user_id": {
+                    "type": "string",
+                },
+                "query": {
+                    "type": "string",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "default": 5,
+                },
             },
-            "required": ["user_id", "query"],
+            "required": [
+                "user_id",
+                "query",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 3. SEARCH CHUNKS
+    # ========================================================
+
     Tool(
         name="search_chunks",
-        description="Raw semantic (vector-only) search over stored chunks/memories, without BM25/fuzzy fusion. Use this when you specifically want pure meaning-based similarity instead of the blended ranking search_memory gives you.",
+        description=(
+            "Perform raw semantic vector search over stored "
+            "chunks/memories without BM25 or fuzzy fusion."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "query": {"type": "string"},
-                "top_k": {"type": "integer", "default": 10},
+                "user_id": {
+                    "type": "string",
+                },
+                "query": {
+                    "type": "string",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "default": 10,
+                },
             },
-            "required": ["user_id", "query"],
+            "required": [
+                "user_id",
+                "query",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 4. FIND RELATED ENTITIES
+    # ========================================================
+
     Tool(
         name="find_related_entities",
-        description="Given an entity name, return related entities up to two relationship hops away in the knowledge graph. Use this for 'what is X connected to' style questions.",
+        description=(
+            "Given an entity name, return related entities up to "
+            "two relationship hops away in the knowledge graph."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "entity_name": {"type": "string"},
+                "entity_name": {
+                    "type": "string",
+                },
             },
-            "required": ["entity_name"],
+            "required": [
+                "entity_name",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 5. FIND ENTITY
+    # ========================================================
+
     Tool(
         name="find_entity",
-        description="Look up a single entity by name directly (no relationship expansion). Use this to check whether an entity exists / get its exact stored name and type before calling find_related_entities.",
+        description=(
+            "Look up a single entity directly by name without "
+            "relationship expansion."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "entity_name": {"type": "string"},
+                "entity_name": {
+                    "type": "string",
+                },
             },
-            "required": ["entity_name"],
+            "required": [
+                "entity_name",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 6. GET DOCUMENT CONTEXT
+    # ========================================================
+
     Tool(
         name="get_document_context",
-        description="Given a document id, return everything MemoraGraph knows about it: metadata, extracted entities, and stored chunk content.",
+        description=(
+            "Given a document ID, return everything MemoraGraph "
+            "knows about the document including metadata, extracted "
+            "entities and stored chunk content."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "doc_id": {"type": "string"},
+                "doc_id": {
+                    "type": "string",
+                },
             },
-            "required": ["doc_id"],
+            "required": [
+                "doc_id",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 7. LIST DOCUMENTS
+    # ========================================================
+
     Tool(
         name="list_documents",
-        description="List every document a given user has uploaded, with metadata (filename, file type, upload time). Use this before get_document_context if you don't already have a doc_id.",
+        description=(
+            "List every document uploaded by a given user with "
+            "metadata such as filename, file type and upload time."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
+                "user_id": {
+                    "type": "string",
+                },
             },
-            "required": ["user_id"],
+            "required": [
+                "user_id",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 8. LIST MEMORIES
+    # ========================================================
+
     Tool(
         name="list_memories",
-        description="List every active (non-superseded, non-deleted) memory stored so far. Use this to see what's currently remembered without needing a specific search query.",
+        description=(
+            "List all currently active memories for a user."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
+                "user_id": {
+                    "type": "string",
+                },
             },
-            "required": ["user_id"],
+            "required": [
+                "user_id",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 9. UPDATE MEMORY
+    # ========================================================
+
     Tool(
         name="update_memory",
-        description="Update an existing memory. Marks the old version as superseded and stores the new text as an active memory.",
+        description=(
+            "Update an existing memory. The old memory is marked "
+            "as superseded and the new text becomes active."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "memory_id": {"type": "string"},
-                "new_text": {"type": "string"},
+                "user_id": {
+                    "type": "string",
+                },
+                "memory_id": {
+                    "type": "string",
+                },
+                "new_text": {
+                    "type": "string",
+                },
             },
-            "required": ["user_id", "memory_id", "new_text"],
+            "required": [
+                "user_id",
+                "memory_id",
+                "new_text",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 10. FORGET MEMORY
+    # ========================================================
+
     Tool(
         name="forget_memory",
-        description="Delete a memory permanently. Requires confirm=true — the caller must confirm the deletion with the user first.",
+        description=(
+            "Delete a memory permanently. Requires confirm=true."
+        ),
         inputSchema={
             "type": "object",
             "properties": {
-                "user_id": {"type": "string"},
-                "memory_id": {"type": "string"},
-                "confirm": {"type": "boolean", "default": False},
+                "user_id": {
+                    "type": "string",
+                },
+                "memory_id": {
+                    "type": "string",
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "default": False,
+                },
             },
-            "required": ["user_id", "memory_id"],
+            "required": [
+                "user_id",
+                "memory_id",
+            ],
         },
     ),
+
+
+    # ========================================================
+    # 11. GET AUDIT LOG
+    # ========================================================
+
     Tool(
         name="get_audit_log",
-        description="Return the audit trail of which tool accessed/changed what, and when. Use this for transparency questions like 'what have you done so far'.",
+        description=(
+            "Return the audit trail showing which MCP tools "
+            "accessed or modified information."
+        ),
         inputSchema={
             "type": "object",
             "properties": {},
@@ -172,109 +387,486 @@ TOOLS = [
 ]
 
 
+# ============================================================
+# LIST TOOLS
+# ============================================================
+#
+# MCP 1.x uses decorator-based registration.
+#
+# The MCP SDK automatically converts this list into the proper
+# ListToolsResult response.
+#
+# ============================================================
+
 @server.list_tools()
-async def list_tools() -> list[Tool]:
+async def handle_list_tools() -> list[Tool]:
+
     return TOOLS
 
 
+# ============================================================
+# CALL TOOL
+# ============================================================
+
 @server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    user_id = arguments.get("user_id", "")
+async def handle_call_tool(
+    name: str,
+    arguments: dict[str, Any],
+) -> list[TextContent]:
+
+    user_id = arguments.get(
+        "user_id",
+        "",
+    )
 
     try:
+
+        # ====================================================
+        # STORE MEMORY
+        # ====================================================
+
         if name == "store_memory":
-            check_permission(user_id, name, ToolRisk.WRITE)
-            record, duplicate_id = store_memory(arguments["text"], arguments.get("source_doc_id"))
-            audit_log(user_id, name, record.memory_id, "store")
+
+            check_permission(
+                user_id,
+                name,
+                ToolRisk.WRITE,
+            )
+
+            record, duplicate_id = store_memory(
+                arguments["text"],
+                arguments.get("source_doc_id"),
+            )
+
+            audit_log(
+                user_id,
+                name,
+                record.memory_id,
+                "store",
+            )
+
             result = {
                 "memory_id": record.memory_id,
                 "status": record.status,
                 "duplicate_of": duplicate_id,
             }
 
+
+        # ====================================================
+        # SEARCH MEMORY
+        # Hybrid Retrieval:
+        # Vector + BM25 + Fuzzy + RRF
+        # ====================================================
+
         elif name == "search_memory":
-            check_permission(user_id, name, ToolRisk.READ)
-            top_k = arguments.get("top_k", 5)
-            fused = hybrid_search(arguments["query"], vector_index, bm25_index, fuzzy_index, top_k=top_k)
+
+            check_permission(
+                user_id,
+                name,
+                ToolRisk.READ,
+            )
+
+            top_k = arguments.get(
+                "top_k",
+                5,
+            )
+
+            fused = hybrid_search(
+                arguments["query"],
+                vector_index,
+                bm25_index,
+                fuzzy_index,
+                top_k=top_k,
+            )
+
             results = [
-                {"memory_id": cid, "text": vector_index.get_text(cid), "score": round(score, 4)}
-                for cid, score in fused
+                {
+                    "memory_id": memory_id,
+                    "text": vector_index.get_text(
+                        memory_id
+                    ),
+                    "score": round(
+                        score,
+                        4,
+                    ),
+                }
+                for memory_id, score in fused
             ]
-            audit_log(user_id, name, None, f"search: {arguments['query']}")
-            result = {"results": results}
 
-        elif name == "search_chunks":
-            check_permission(user_id, name, ToolRisk.READ)
-            top_k = arguments.get("top_k", 10)
-            raw = vector_index.search(arguments["query"], top_k=top_k)
-            results = [
-                {"item_id": cid, "text": vector_index.get_text(cid), "score": round(score, 4)}
-                for cid, score in raw
-            ]
-            audit_log(user_id, name, None, f"search_chunks: {arguments['query']}")
-            result = {"results": results}
+            audit_log(
+                user_id,
+                name,
+                None,
+                f"search: {arguments['query']}",
+            )
 
-        elif name == "find_related_entities":
-            related = two_hop_expansion(arguments["entity_name"])
-            audit_log(user_id or "anonymous", name, None, f"related: {arguments['entity_name']}")
-            result = {"related": related}
-
-        elif name == "find_entity":
-            entity = find_entity_by_name(arguments["entity_name"])
-            audit_log(user_id or "anonymous", name, None, f"find_entity: {arguments['entity_name']}")
-            result = {"entity": entity}
-
-        elif name == "get_document_context":
-            check_permission(user_id or "anonymous", name, ToolRisk.READ)
-            context = get_document_context(arguments["doc_id"])
-            audit_log(user_id or "anonymous", name, arguments["doc_id"], "get_document_context")
-            result = context
-
-        elif name == "list_documents":
-            check_permission(user_id, name, ToolRisk.READ)
-            docs = db.list_documents_by_user(user_id)
-            audit_log(user_id, name, None, "list_documents")
-            result = {"documents": [d.model_dump(mode="json") for d in docs]}
-
-        elif name == "list_memories":
-            check_permission(user_id, name, ToolRisk.READ)
-            memories = db.list_active_memories(user_id)
-            audit_log(user_id, name, None, "list_memories")
-            result = {"memories": [m.model_dump(mode="json") for m in memories]}
-
-        elif name == "update_memory":
-            check_permission(user_id, name, ToolRisk.SENSITIVE)
-            new_record = update_memory(arguments["memory_id"], arguments["new_text"])
-            audit_log(user_id, name, arguments["memory_id"], "update")
             result = {
-                "old_memory_id": arguments["memory_id"],
-                "new_memory_id": new_record.memory_id,
-                "status": new_record.status,
+                "results": results,
             }
 
+
+        # ====================================================
+        # SEARCH CHUNKS
+        # Vector-only semantic retrieval
+        # ====================================================
+
+        elif name == "search_chunks":
+
+            check_permission(
+                user_id,
+                name,
+                ToolRisk.READ,
+            )
+
+            top_k = arguments.get(
+                "top_k",
+                10,
+            )
+
+            raw_results = vector_index.search(
+                arguments["query"],
+                top_k=top_k,
+            )
+
+            results = [
+                {
+                    "item_id": item_id,
+                    "text": vector_index.get_text(
+                        item_id
+                    ),
+                    "score": round(
+                        score,
+                        4,
+                    ),
+                }
+                for item_id, score in raw_results
+            ]
+
+            audit_log(
+                user_id,
+                name,
+                None,
+                f"search_chunks: {arguments['query']}",
+            )
+
+            result = {
+                "results": results,
+            }
+
+
+        # ====================================================
+        # FIND RELATED ENTITIES
+        # FalkorDB two-hop graph expansion
+        # ====================================================
+
+        elif name == "find_related_entities":
+
+            related = two_hop_expansion(
+                arguments["entity_name"]
+            )
+
+            audit_log(
+                user_id or "anonymous",
+                name,
+                None,
+                (
+                    "related: "
+                    f"{arguments['entity_name']}"
+                ),
+            )
+
+            result = {
+                "related": related,
+            }
+
+
+        # ====================================================
+        # FIND ENTITY
+        # ====================================================
+
+        elif name == "find_entity":
+
+            entity = find_entity_by_name(
+                arguments["entity_name"]
+            )
+
+            audit_log(
+                user_id or "anonymous",
+                name,
+                None,
+                (
+                    "find_entity: "
+                    f"{arguments['entity_name']}"
+                ),
+            )
+
+            result = {
+                "entity": entity,
+            }
+
+
+        # ====================================================
+        # GET DOCUMENT CONTEXT
+        # ====================================================
+
+        elif name == "get_document_context":
+
+            check_permission(
+                user_id or "anonymous",
+                name,
+                ToolRisk.READ,
+            )
+
+            context = get_document_context(
+                arguments["doc_id"]
+            )
+
+            audit_log(
+                user_id or "anonymous",
+                name,
+                arguments["doc_id"],
+                "get_document_context",
+            )
+
+            result = context
+
+
+        # ====================================================
+        # LIST DOCUMENTS
+        # ====================================================
+
+        elif name == "list_documents":
+
+            check_permission(
+                user_id,
+                name,
+                ToolRisk.READ,
+            )
+
+            documents = (
+                db.list_documents_by_user(
+                    user_id
+                )
+            )
+
+            audit_log(
+                user_id,
+                name,
+                None,
+                "list_documents",
+            )
+
+            result = {
+                "documents": [
+                    document.model_dump(
+                        mode="json"
+                    )
+                    for document in documents
+                ],
+            }
+
+
+        # ====================================================
+        # LIST MEMORIES
+        # ====================================================
+
+        elif name == "list_memories":
+
+            check_permission(
+                user_id,
+                name,
+                ToolRisk.READ,
+            )
+
+            memories = (
+                db.list_active_memories(
+                    user_id
+                )
+            )
+
+            audit_log(
+                user_id,
+                name,
+                None,
+                "list_memories",
+            )
+
+            result = {
+                "memories": [
+                    memory.model_dump(
+                        mode="json"
+                    )
+                    for memory in memories
+                ],
+            }
+
+
+        # ====================================================
+        # UPDATE MEMORY
+        # ====================================================
+
+        elif name == "update_memory":
+
+            check_permission(
+                user_id,
+                name,
+                ToolRisk.SENSITIVE,
+            )
+
+            new_record = update_memory(
+                arguments["memory_id"],
+                arguments["new_text"],
+            )
+
+            audit_log(
+                user_id,
+                name,
+                arguments["memory_id"],
+                "update",
+            )
+
+            result = {
+                "old_memory_id":
+                    arguments["memory_id"],
+
+                "new_memory_id":
+                    new_record.memory_id,
+
+                "status":
+                    new_record.status,
+            }
+
+
+        # ====================================================
+        # FORGET MEMORY
+        # ====================================================
+
         elif name == "forget_memory":
-            check_permission(user_id, name, ToolRisk.SENSITIVE)
-            confirm = arguments.get("confirm", False)
-            deleted, message = forget_memory(arguments["memory_id"], confirmed=confirm)
-            audit_log(user_id, name, arguments["memory_id"], f"forget (confirmed={confirm})")
-            result = {"memory_id": arguments["memory_id"], "deleted": deleted, "message": message}
+
+            check_permission(
+                user_id,
+                name,
+                ToolRisk.SENSITIVE,
+            )
+
+            confirm = arguments.get(
+                "confirm",
+                False,
+            )
+
+            deleted, message = forget_memory(
+                arguments["memory_id"],
+                confirmed=confirm,
+            )
+
+            audit_log(
+                user_id,
+                name,
+                arguments["memory_id"],
+                (
+                    "forget "
+                    f"(confirmed={confirm})"
+                ),
+            )
+
+            result = {
+                "memory_id":
+                    arguments["memory_id"],
+
+                "deleted":
+                    deleted,
+
+                "message":
+                    message,
+            }
+
+
+        # ====================================================
+        # GET AUDIT LOG
+        # ====================================================
 
         elif name == "get_audit_log":
-            result = {"audit_log": get_audit_log()}
+
+            result = {
+                "audit_log":
+                    get_audit_log(),
+            }
+
+
+        # ====================================================
+        # UNKNOWN TOOL
+        # ====================================================
 
         else:
-            result = {"error": f"Unknown tool: {name}"}
 
-    except PermissionDenied as e:
-        result = {"error": str(e)}
+            result = {
+                "error":
+                    f"Unknown tool: {name}",
+            }
 
-    return [TextContent(type="text", text=json.dumps(result, default=str))]
 
+    # ========================================================
+    # PERMISSION ERROR
+    # ========================================================
+
+    except PermissionDenied as error:
+
+        result = {
+            "error": str(error),
+        }
+
+
+    # ========================================================
+    # RETURN MCP CONTENT
+    # ========================================================
+
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(
+                result,
+                default=str,
+            ),
+        )
+    ]
+
+
+# ============================================================
+# START MCP SERVER
+# ============================================================
 
 async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
 
+    async with (
+        mcp.server.stdio.stdio_server()
+    ) as (
+        read_stream,
+        write_stream,
+    ):
+
+        await server.run(
+            read_stream,
+            write_stream,
+
+            InitializationOptions(
+                server_name="memoragraph",
+                server_version="1.0.0",
+
+                capabilities=(
+                    server.get_capabilities(
+                        notification_options=(
+                            NotificationOptions()
+                        ),
+                        experimental_capabilities={},
+                    )
+                ),
+            ),
+        )
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
     asyncio.run(main())

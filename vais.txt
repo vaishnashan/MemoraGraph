@@ -10,15 +10,56 @@
 
 
 3.docker
-  docker compose build --no-cache     
-  docker compose up --build   - after chaning the docker file codes
+    
+docker compose up -d --build   (  First time — build images and create/start containers)
 
 
-  docker compose build
-  docker compose up memoragraph-ingestion
-  docker compose run --rm memoragraph-mcp
+docker compose up -d --build     (  You changed Python/code files )
+docker compose up -d --build memoragraph-ingestion   ( only for fastapi)
+docker compose up -d --build memoragraph-mcp         ( only for mcp )
 
-  
+
+                                
+docker compose up -d                (You changed the Dockerfile)
+docker compose up -d memoragraph-ingestion  ( for fast api)
+docker compose up -d memoragraph-mcp        ( for mcp )
+
+You changed docker-compose.yml    ( you changed docker compose yml file )
+
+
+docker compose up -d   (Both FastAPI and MCP start.)
+docker compose up -d memoragraph-ingestion  ( only fast api)
+docker compose up -d memoragraph-mcp   ( only mcp)
+
+
+
+
 http://localhost:8000/docs
 MCP is something a *program launches and talks to*, never something you open in a tab.
 
+                    MEMORAGRAPH
+                         │
+          ┌──────────────┴──────────────┐
+          │                             │
+      FastAPI                         MCP
+          │                             │
+       HTTP                           stdio
+          │                             │
+   localhost:8000                MCP Client
+          │                             │
+ /upload /health /docs          tools/list
+          │                      tools/call
+          │                             │
+          └──────────┬──────────────────┘
+                     │
+              MemoraGraph Core
+                     │
+       ┌─────────────┼─────────────┐
+       ▼             ▼             ▼
+   Supabase       FalkorDB     Vector/BM25
+
+
+   docker compose build --no-cache memoragraph-mcp
+   docker compose run --rm -T memoragraph-mcp python -c "import application.mcp.server; print('MCP IMPORT OK')"
+   MCP IMPORT OK
+   npx @modelcontextprotocol/inspector -- docker compose run --rm -T memoragraph-mcp
