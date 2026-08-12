@@ -32,8 +32,6 @@ docker compose up -d memoragraph-ingestion  ( only fast api)
 docker compose up -d memoragraph-mcp   ( only mcp)
 
 
-
-
 http://localhost:8000/docs
 MCP is something a *program launches and talks to*, never something you open in a tab.
 
