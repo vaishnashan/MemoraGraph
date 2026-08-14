@@ -1,4 +1,10 @@
+netstat -ano | findstr LISTENING
+netstat -ano | findstr :8000
+
 1. To run ingestion
+    cd to codebase
+    and activate venv
+
  uvicorn application.ingestion.main:app --reload 
  http://localhost:8000/docs
 
@@ -10,31 +16,18 @@
 
 
 3.docker
+
+docker compose up --build
     
-docker compose up -d --build   (  First time — build images and create/start containers)
-
-
-docker compose up -d --build     (  You changed Python/code files )
-docker compose up -d --build memoragraph-ingestion   ( only for fastapi)
-docker compose up -d --build memoragraph-mcp         ( only for mcp )
-
-
-                                
-docker compose up -d                (You changed the Dockerfile)
-docker compose up -d memoragraph-ingestion  ( for fast api)
-docker compose up -d memoragraph-mcp        ( for mcp )
-
-You changed docker-compose.yml    ( you changed docker compose yml file )
-
-
-docker compose up -d   (Both FastAPI and MCP start.)
-docker compose up -d memoragraph-ingestion  ( only fast api)
-docker compose up -d memoragraph-mcp   ( only mcp)
-
-
+This one starts automatically with plain docker compose up --build since it has no profiles: set. Just open:
 http://localhost:8000/docs
-MCP is something a *program launches and talks to*, never something you open in a tab.
+Check docker compose logs -f memoragraph-ingestion if you want to watch it load.
 
+
+starting the container yourself and let Inspector spawn it directly via docker compose run:
+  npx @modelcontextprotocol/inspector docker compose run -T --rm memoragraph-mcp python -m application.mcp.server
+
+  
                     MEMORAGRAPH
                          │
           ┌──────────────┴──────────────┐

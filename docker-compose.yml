@@ -13,6 +13,14 @@ services:
     env_file:
       - .env
 
+    # NEW: persist the sentence-transformers + docling model cache across
+    # container rebuilds. Without this, every `docker compose up --build`
+    # starts from an empty /root/.cache and has to re-download the
+    # embedding model + Docling's ~1-2GB ML models from the internet
+    # before the app can even start (this is what looks like "stuck").
+    volumes:
+      - model-cache:/root/.cache
+
     restart: unless-stopped
 
     healthcheck:
@@ -20,6 +28,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 120s   # NEW: give the model download/load time on cold start
 
 
   memoragraph-mcp:
@@ -32,9 +41,16 @@ services:
     env_file:
       - .env
 
+    volumes:
+      - model-cache:/root/.cache
+
     command: ["python", "-m", "application.mcp.server"]
 
     stdin_open: true
+    tty: true          # NEW: stdio MCP transport needs a real attached tty/pipe
 
     profiles:
       - mcp
+
+volumes:
+  model-cache:
