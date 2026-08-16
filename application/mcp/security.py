@@ -16,7 +16,7 @@ from enum import Enum
 
 
 class ToolRisk(str, Enum):
-    READ = "read"          # search_memory, find_related_entities, get_document_context
+    READ = "read"          # search_memory_hybrid, search_memory_semantic, find_related_entities, get_document_context
     WRITE = "write"         # store_memory
     SENSITIVE = "sensitive"  # update_memory, forget_memory
 

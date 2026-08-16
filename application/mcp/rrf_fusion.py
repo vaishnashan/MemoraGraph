@@ -8,7 +8,7 @@ default from the original RRF paper — no need to tune unless you have
 a reason to.
 
 This is the ONLY place hybrid_search lives now (previously duplicated in
-both routes9/search.py and here) — the search_memory MCP tool calls it
+both routes9/search.py and here) — the search_memory_hybrid MCP tool calls it
 directly. There is no FastAPI /search route anymore; search is an
 agent-facing capability exposed only through MCP.
 """

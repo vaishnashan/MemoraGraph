@@ -8,8 +8,8 @@ the memory system.
 Exposes 11 tools:
 
 1.  store_memory
-2.  search_memory
-3.  search_chunks
+2.  search_memory_hybrid
+3.  search_memory_semantic
 4.  find_related_entities
 5.  find_entity
 6.  get_document_context
@@ -121,11 +121,11 @@ TOOLS = [
 
 
     # ========================================================
-    # 2. SEARCH MEMORY
+    # 2. SEARCH MEMORY (HYBRID)
     # ========================================================
 
     Tool(
-        name="search_memory",
+        name="search_memory_hybrid",
         description=(
             "Search stored memories using fused hybrid retrieval "
             "(vector + BM25 + fuzzy, combined with RRF) and return "
@@ -154,11 +154,11 @@ TOOLS = [
 
 
     # ========================================================
-    # 3. SEARCH CHUNKS
+    # 3. SEARCH MEMORY (SEMANTIC)
     # ========================================================
 
     Tool(
-        name="search_chunks",
+        name="search_memory_semantic",
         description=(
             "Perform raw semantic vector search over stored "
             "chunks/memories without BM25 or fuzzy fusion."
@@ -453,12 +453,12 @@ async def handle_call_tool(
 
 
         # ====================================================
-        # SEARCH MEMORY
+        # SEARCH MEMORY (HYBRID)
         # Hybrid Retrieval:
         # Vector + BM25 + Fuzzy + RRF
         # ====================================================
 
-        elif name == "search_memory":
+        elif name == "search_memory_hybrid":
 
             check_permission(
                 user_id,
@@ -506,11 +506,11 @@ async def handle_call_tool(
 
 
         # ====================================================
-        # SEARCH CHUNKS
+        # SEARCH MEMORY (SEMANTIC)
         # Vector-only semantic retrieval
         # ====================================================
 
-        elif name == "search_chunks":
+        elif name == "search_memory_semantic":
 
             check_permission(
                 user_id,
@@ -546,7 +546,7 @@ async def handle_call_tool(
                 user_id,
                 name,
                 None,
-                f"search_chunks: {arguments['query']}",
+                f"search_memory_semantic: {arguments['query']}",
             )
 
             result = {

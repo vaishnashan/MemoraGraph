@@ -28,29 +28,68 @@ starting the container yourself and let Inspector spawn it directly via docker c
   npx @modelcontextprotocol/inspector docker compose run -T --rm memoragraph-mcp python -m application.mcp.server
 
   
-                    MEMORAGRAPH
-                         │
-          ┌──────────────┴──────────────┐
-          │                             │
-      FastAPI                         MCP
-          │                             │
-       HTTP                           stdio
-          │                             │
-   localhost:8000                MCP Client
-          │                             │
- /upload /health /docs          tools/list
-          │                      tools/call
-          │                             │
-          └──────────┬──────────────────┘
-                     │
-              MemoraGraph Core
-                     │
-       ┌─────────────┼─────────────┐
-       ▼             ▼             ▼
-   Supabase       FalkorDB     Vector/BM25
+                                 AI Agent
+                                    ↓
+                               MCP Client
+                                    ↓
+                                  stdio
+                                    ↓
+                                server.py
+                                    ↓
+                       11 MCP tools are exposed
+                                    ↓
+ ┌──────────────────────┬───────────────────────┬───────────────────────┐
+ │                      │                       │                       │
+ ↓                      ↓                       ↓                       ↓
+SEARCH                 MEMORY                  GRAPH                 OTHER
+ │                      │                       │                       │
+ │                      │                       │                       │
+ ├─ search_memory       ├─ store_memory         ├─ find_entity          ├─ list_documents
+ └─ search_chunks       ├─ update_memory        └─ find_related         ├─ list_memories
+                        ├─ forget_memory                                └─ get_audit_log
+                        └─ get_document_context
+ │                      │                       │
+ ↓                      ↓                       ↓
+rrf_fusion.py        lifecycle.py         falkordb_client.py
+ │                      │                       │
+ ├──────────────┐       ├─ embedder.py          ↓
+ ↓              ↓       ├─ vector_search.py   FalkorDB
+vector_search  BM25     ├─ supabase_client.py
+ ↓              ↓       └─ falkordb_client.py
+embedder.py   bm25_search.py       ↓
+ ↓                              Supabase
+fuzzy_search.py
+ ↓
+supabase_client.py
+ ↓
+Supabase PostgreSQL
+ ↓
+indexed_texts
 
 
    docker compose build --no-cache memoragraph-mcp
    docker compose run --rm -T memoragraph-mcp python -c "import application.mcp.server; print('MCP IMPORT OK')"
    MCP IMPORT OK
    npx @modelcontextprotocol/inspector -- docker compose run --rm -T memoragraph-mcp
+
+
+   SEARCH
+├── search_memory_hybrid
+└── search_memory_semantic
+MEMORY
+├── store_memory
+├── update_memory
+└── forget_memory
+
+DOCUMENT
+├── list_documents
+└── get_document_context
+
+GRAPH
+└── find_related_entities
+
+AUDIT
+└── get_audit_log
+
+
+
